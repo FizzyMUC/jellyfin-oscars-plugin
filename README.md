@@ -57,6 +57,12 @@ This step is optional, but it is required if you want the Oscar badge to appear 
 2. Install `JavaScript Injector`.
 3. Restart Jellyfin.
 
+Repository:
+
+`https://github.com/n00bcodr/Jellyfin-JavaScript-Injector`
+
+If you do not already have it installed, follow the installation instructions in that repository.
+
 ### Add Script in JavaScript Injector
 
 Use this exact script:
