@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Jellyfin Oscars</title>
+</head>
+<body>
+    <div id="JellyfinOscarsConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="JellyfinOscarsConfigForm">
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h2 class="sectionTitle">Jellyfin Oscars Settings</h2>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="OmdbApiKey">OMDb API Key</label>
+                            <input id="OmdbApiKey" name="OmdbApiKey" type="text" is="emby-input" autocomplete="off" />
+                            <div class="fieldDescription">OMDb provides the awards data used by this plugin. Get a key from omdbapi.com. Your full key is never shown in the UI or written to plugin logs.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="EnableOscarEnrichment" name="EnableOscarEnrichment" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Oscar enrichment</span>
+                            </label>
+                            <div class="fieldDescription">When enabled, the plugin checks eligible movies for Oscar wins and nominations and updates their metadata during refresh.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="CacheDurationHours">Cache duration in hours</label>
+                            <input id="CacheDurationHours" name="CacheDurationHours" type="number" min="1" step="1" is="emby-input" />
+                            <div class="fieldDescription">Lower values refresh Oscar data more often but use more OMDb requests. Recommended default: 24 hours.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="EnableScheduledRefresh" name="EnableScheduledRefresh" type="checkbox" is="emby-checkbox" />
+                                <span>Enable scheduled refresh</span>
+                            </label>
+                            <div class="fieldDescription">Allows the plugin to refresh Oscar data automatically on a schedule instead of waiting only for manual library refreshes.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="RefreshBatchSize">Refresh batch size</label>
+                            <input id="RefreshBatchSize" name="RefreshBatchSize" type="number" min="1" step="1" is="emby-input" />
+                            <div class="fieldDescription">Controls how many movies are processed in one refresh run. Small libraries: 5-10. Large libraries: 20-50.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="CreateOscarWinnersCollection" name="CreateOscarWinnersCollection" type="checkbox" is="emby-checkbox" />
+                                <span>Create "Oscar Winners" collection</span>
+                            </label>
+                            <div class="fieldDescription">Maintains a collection containing movies in your library that won at least one Oscar.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="CreateOscarNomineesCollection" name="CreateOscarNomineesCollection" type="checkbox" is="emby-checkbox" />
+                                <span>Create "Oscar Nominees" collection</span>
+                            </label>
+                            <div class="fieldDescription">Maintains a collection containing movies in your library that were nominated for an Oscar.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="IncludeWinnersInNomineesCollection" name="IncludeWinnersInNomineesCollection" type="checkbox" is="emby-checkbox" />
+                                <span>Include winners in nominees collection</span>
+                            </label>
+                            <div class="fieldDescription">When enabled, Oscar-winning movies will also appear in the nominees collection.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="SetDefaultArtworkForOscarCollections" name="SetDefaultArtworkForOscarCollections" type="checkbox" is="emby-checkbox" />
+                                <span>Set default artwork for Oscar collections</span>
+                            </label>
+                            <div class="fieldDescription">Adds the plugin's default poster artwork to Oscar collections only when they do not already have a primary image.</div>
+                        </div>
+
+                        <div class="sectionTitleContainer">
+                            <button id="TestOmdbConnectionButton" is="emby-button" type="button" class="raised emby-button button-alt">
+                                <span>Test OMDb Connection</span>
+                            </button>
+                        </div>
+
+                        <div id="OmdbConnectionResult" class="fieldDescription" aria-live="polite"></div>
+
+                        <div class="sectionTitleContainer">
+                            <button id="ScanLibraryButton" is="emby-button" type="button" class="raised emby-button button-alt">
+                                <span>Scan Library For Oscars</span>
+                            </button>
+                        </div>
+
+                        <div class="fieldDescription">Scans existing movies in your library and adds Oscar tags where applicable.</div>
+                        <div id="LibraryScanResult" class="fieldDescription" aria-live="polite"></div>
+
+                        <div class="sectionTitleContainer">
+                            <button id="RebuildCollectionsButton" is="emby-button" type="button" class="raised emby-button button-alt">
+                                <span>Rebuild Oscar collections now</span>
+                            </button>
+                        </div>
+
+                        <div class="fieldDescription">Rebuilds Oscar collections immediately based on current library data and Oscar tags.</div>
+                        <div id="CollectionSyncResult" class="fieldDescription" aria-live="polite"></div>
+
+                        <div>
+                            <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                                <span>Save</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            (function () {
+                window.JellyfinOscarsConfigPage = window.JellyfinOscarsConfigPage || {};
+                window.JellyfinOscarsConfigPage.pluginUniqueId = 'c531afa3-de20-4055-aca5-a7cc43adf783';
+
+                var pluginPage = window.JellyfinOscarsConfigPage;
+                var pluginUniqueId = pluginPage.pluginUniqueId;
+                var configPage = document.querySelector('#JellyfinOscarsConfigPage');
+                var configForm = document.querySelector('#JellyfinOscarsConfigForm');
+                var testButton = document.querySelector('#TestOmdbConnectionButton');
+                var scanButton = document.querySelector('#ScanLibraryButton');
+                var rebuildCollectionsButton = document.querySelector('#RebuildCollectionsButton');
+                var resultNode = document.querySelector('#OmdbConnectionResult');
+                var scanResultNode = document.querySelector('#LibraryScanResult');
+                var collectionResultNode = document.querySelector('#CollectionSyncResult');
+
+                configPage.setAttribute('data-pluginid', pluginUniqueId);
+
+                function getUrl(path) {
+                    return ApiClient.getUrl(path);
+                }
+
+                function ajax(options) {
+                    return ApiClient.ajax(options);
+                }
+
+                function buildLogPayload(eventName, config) {
+                    return {
+                        eventName: eventName,
+                        hasApiKey: !!(config && config.OmdbApiKey),
+                        enableOscarEnrichment: !!(config && config.EnableOscarEnrichment),
+                        cacheDurationHours: config && config.CacheDurationHours ? config.CacheDurationHours : 0,
+                        enableScheduledRefresh: !!(config && config.EnableScheduledRefresh),
+                        refreshBatchSize: config && config.RefreshBatchSize ? config.RefreshBatchSize : 0,
+                        createOscarWinnersCollection: !!(config && config.CreateOscarWinnersCollection),
+                        createOscarNomineesCollection: !!(config && config.CreateOscarNomineesCollection),
+                        includeWinnersInNomineesCollection: !!(config && config.IncludeWinnersInNomineesCollection),
+                        setDefaultArtworkForOscarCollections: !!(config && config.SetDefaultArtworkForOscarCollections)
+                    };
+                }
+
+                function logConfigurationEvent(eventName, config) {
+                    try {
+                        var request = ajax({
+                            type: 'POST',
+                            url: getUrl('Plugins/Jellyfin.Oscars/ConfigurationLog'),
+                            data: JSON.stringify(buildLogPayload(eventName, config)),
+                            contentType: 'application/json'
+                        });
+
+                        if (request && typeof request.catch === 'function') {
+                            return request.catch(function () {
+                                return null;
+                            });
+                        }
+
+                        return Promise.resolve(null);
+                    } catch (error) {
+                        return Promise.resolve(null);
+                    }
+                }
+
+                function logConfigurationEventAsync(eventName, config) {
+                    window.setTimeout(function () {
+                        logConfigurationEvent(eventName, config);
+                    }, 0);
+                }
+
+                function parseAjaxJson(result) {
+                    if (!result) {
+                        return {};
+                    }
+
+                    if (result.responseJSON) {
+                        return result.responseJSON;
+                    }
+
+                    if (result.data && typeof result.data === 'object') {
+                        return result.data;
+                    }
+
+                    if (typeof result === 'string') {
+                        try {
+                            return JSON.parse(result);
+                        } catch (error) {
+                            return { message: result };
+                        }
+                    }
+
+                    if (typeof result.responseText === 'string' && result.responseText.length) {
+                        try {
+                            return JSON.parse(result.responseText);
+                        } catch (error) {
+                            return { message: result.responseText };
+                        }
+                    }
+
+                    return result;
+                }
+
+                function normalizeOmdbTestPayload(payload) {
+                    var message = payload && (payload.message || payload.Message);
+                    var hasSuccessFlag = payload && (typeof payload.isSuccess !== 'undefined' || typeof payload.IsSuccess !== 'undefined');
+                    var isSuccess = payload && (typeof payload.isSuccess !== 'undefined'
+                        ? !!payload.isSuccess
+                        : !!payload.IsSuccess);
+                    var errorCode = payload && (payload.errorCode || payload.ErrorCode);
+
+                    return {
+                        hasSuccessFlag: !!hasSuccessFlag,
+                        isSuccess: !!isSuccess,
+                        message: message,
+                        errorCode: errorCode
+                    };
+                }
+
+                function getErrorMessage(error, fallbackMessage) {
+                    var payload = parseAjaxJson(error);
+
+                    if (payload.message) {
+                        return payload.message;
+                    }
+
+                    if (payload.Message) {
+                        return payload.Message;
+                    }
+
+                    if (payload.title) {
+                        return payload.title;
+                    }
+
+                    if (payload.Title) {
+                        return payload.Title;
+                    }
+
+                    if (error && error.responseJSON && error.responseJSON.title) {
+                        return error.responseJSON.title;
+                    }
+
+                    if (error && error.statusText && error.statusText !== 'error') {
+                        return error.statusText;
+                    }
+
+                    return fallbackMessage;
+                }
+
+                function applyFormValues(config) {
+                    document.querySelector('#OmdbApiKey').value = config.OmdbApiKey || '';
+                    document.querySelector('#EnableOscarEnrichment').checked = !!config.EnableOscarEnrichment;
+                    document.querySelector('#CacheDurationHours').value = config.CacheDurationHours || 168;
+                    document.querySelector('#EnableScheduledRefresh').checked = !!config.EnableScheduledRefresh;
+                    document.querySelector('#RefreshBatchSize').value = config.RefreshBatchSize || 100;
+                    document.querySelector('#CreateOscarWinnersCollection').checked = !!config.CreateOscarWinnersCollection;
+                    document.querySelector('#CreateOscarNomineesCollection').checked = !!config.CreateOscarNomineesCollection;
+                    document.querySelector('#IncludeWinnersInNomineesCollection').checked = !!config.IncludeWinnersInNomineesCollection;
+                    document.querySelector('#SetDefaultArtworkForOscarCollections').checked = config.SetDefaultArtworkForOscarCollections !== false;
+                }
+
+                function updateConfigurationObject(config) {
+                    config.OmdbApiKey = document.querySelector('#OmdbApiKey').value || '';
+                    config.EnableOscarEnrichment = document.querySelector('#EnableOscarEnrichment').checked;
+                    config.CacheDurationHours = parseInt(document.querySelector('#CacheDurationHours').value || '0', 10);
+                    config.EnableScheduledRefresh = document.querySelector('#EnableScheduledRefresh').checked;
+                    config.RefreshBatchSize = parseInt(document.querySelector('#RefreshBatchSize').value || '0', 10);
+                    config.CreateOscarWinnersCollection = document.querySelector('#CreateOscarWinnersCollection').checked;
+                    config.CreateOscarNomineesCollection = document.querySelector('#CreateOscarNomineesCollection').checked;
+                    config.IncludeWinnersInNomineesCollection = document.querySelector('#IncludeWinnersInNomineesCollection').checked;
+                    config.SetDefaultArtworkForOscarCollections = document.querySelector('#SetDefaultArtworkForOscarCollections').checked;
+
+                    return config;
+                }
+
+                function renderResult(message, isSuccess) {
+                    resultNode.textContent = message || '';
+                    resultNode.style.color = isSuccess ? 'var(--theme-primary-color)' : 'var(--theme-error-color)';
+                    resultNode.style.fontWeight = message ? '600' : '400';
+                }
+
+                function renderScanResult(message, isSuccess) {
+                    scanResultNode.textContent = message || '';
+                    scanResultNode.style.color = isSuccess ? 'var(--theme-primary-color)' : 'var(--theme-error-color)';
+                    scanResultNode.style.fontWeight = message ? '600' : '400';
+                }
+
+                function renderCollectionResult(message, isSuccess) {
+                    collectionResultNode.textContent = message || '';
+                    collectionResultNode.style.color = isSuccess ? 'var(--theme-primary-color)' : 'var(--theme-error-color)';
+                    collectionResultNode.style.fontWeight = message ? '600' : '400';
+                }
+
+                function configsMatch(expected, actual) {
+                    return (expected.OmdbApiKey || '') === (actual.OmdbApiKey || '') &&
+                        !!expected.EnableOscarEnrichment === !!actual.EnableOscarEnrichment &&
+                        parseInt(expected.CacheDurationHours || 0, 10) === parseInt(actual.CacheDurationHours || 0, 10) &&
+                        !!expected.EnableScheduledRefresh === !!actual.EnableScheduledRefresh &&
+                        parseInt(expected.RefreshBatchSize || 0, 10) === parseInt(actual.RefreshBatchSize || 0, 10) &&
+                        !!expected.CreateOscarWinnersCollection === !!actual.CreateOscarWinnersCollection &&
+                        !!expected.CreateOscarNomineesCollection === !!actual.CreateOscarNomineesCollection &&
+                        !!expected.IncludeWinnersInNomineesCollection === !!actual.IncludeWinnersInNomineesCollection &&
+                        !!expected.SetDefaultArtworkForOscarCollections === !!actual.SetDefaultArtworkForOscarCollections;
+                }
+
+                function loadConfiguration() {
+                    Dashboard.showLoadingMsg();
+
+                    return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        applyFormValues(config);
+                        renderResult('Configuration loaded.', true);
+                        renderScanResult('', true);
+                        renderCollectionResult('', true);
+                        logConfigurationEventAsync('load', config);
+                    }).catch(function (error) {
+                        var message = getErrorMessage(error, 'Failed to load Jellyfin Oscars configuration.');
+                        renderResult(message, false);
+                        Dashboard.alert(message);
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                function saveConfiguration(event) {
+                    event.preventDefault();
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                        var updatedConfig = updateConfigurationObject(config);
+
+                        return ApiClient.updatePluginConfiguration(pluginUniqueId, updatedConfig).then(function () {
+                            return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (reloadedConfig) {
+                                applyFormValues(reloadedConfig);
+
+                                if (!configsMatch(updatedConfig, reloadedConfig)) {
+                                    renderResult('Settings were sent but did not persist after reload.', false);
+                                    Dashboard.alert('Settings were sent but did not persist after reload.');
+                                    logConfigurationEventAsync('save_mismatch', reloadedConfig);
+                                    return;
+                                }
+
+                                renderResult('Settings saved.', true);
+                                logConfigurationEventAsync('save_verified', reloadedConfig);
+                            });
+                        });
+                    }).catch(function (error) {
+                        var message = getErrorMessage(error, 'Failed to save Jellyfin Oscars configuration.');
+                        renderResult(message, false);
+                        Dashboard.alert(message);
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+
+                    return false;
+                }
+
+                function testConnection() {
+                    var enteredApiKey = document.querySelector('#OmdbApiKey').value || '';
+                    var requestUrl = getUrl('Plugins/Jellyfin.Oscars/TestOmdbConnection?omdbApiKey=' + encodeURIComponent(enteredApiKey));
+
+                    Dashboard.showLoadingMsg();
+                    renderResult('Testing OMDb connection...', true);
+
+                    ajax({
+                        type: 'GET',
+                        url: requestUrl,
+                        dataType: 'json'
+                    }).then(function (response) {
+                        var parsedPayload = parseAjaxJson(response);
+                        var result = normalizeOmdbTestPayload(parsedPayload);
+
+                        if (!result.hasSuccessFlag) {
+                            renderResult('Unexpected OMDb test response.', false);
+                            return;
+                        }
+
+                        renderResult(
+                            result.message || (result.isSuccess ? 'Connected to OMDb successfully.' : 'OMDb test failed.'),
+                            result.isSuccess);
+                    }).catch(function (error) {
+                        renderResult(getErrorMessage(error, 'Failed to execute the OMDb connection test.'), false);
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                function normalizeLibraryScanPayload(payload) {
+                    return {
+                        isSuccess: typeof payload.isSuccess !== 'undefined' ? !!payload.isSuccess : !!payload.IsSuccess,
+                        message: payload.message || payload.Message || '',
+                        totalMoviesFound: payload.totalMoviesFound || payload.TotalMoviesFound || 0,
+                        moviesEligible: payload.moviesEligible || payload.MoviesEligible || 0,
+                        moviesUpdated: payload.moviesUpdated || payload.MoviesUpdated || 0,
+                        moviesSkipped: payload.moviesSkipped || payload.MoviesSkipped || 0,
+                        omdbRequestsMade: payload.omdbRequestsMade || payload.OmdbRequestsMade || 0,
+                        reasonCounts: payload.reasonCounts || payload.ReasonCounts || {}
+                    };
+                }
+
+                function normalizeCollectionSyncPayload(payload) {
+                    return {
+                        isSuccess: typeof payload.isSuccess !== 'undefined' ? !!payload.isSuccess : !!payload.IsSuccess,
+                        message: payload.message || payload.Message || '',
+                        collectionsProcessed: payload.collectionsProcessed || payload.CollectionsProcessed || 0,
+                        moviesAdded: payload.moviesAdded || payload.MoviesAdded || 0,
+                        moviesRemoved: payload.moviesRemoved || payload.MoviesRemoved || 0,
+                        moviesSkipped: payload.moviesSkipped || payload.MoviesSkipped || 0,
+                        errorCount: payload.errorCount || payload.ErrorCount || 0,
+                        errors: payload.errors || payload.Errors || [],
+                        reasonCounts: payload.reasonCounts || payload.ReasonCounts || {}
+                    };
+                }
+
+                function scanLibrary() {
+                    Dashboard.showLoadingMsg();
+                    renderScanResult('Scanning library for Oscars...', true);
+
+                    ajax({
+                        type: 'POST',
+                        url: getUrl('Plugins/Jellyfin.Oscars/ScanLibrary'),
+                        dataType: 'json'
+                    }).then(function (response) {
+                        var payload = normalizeLibraryScanPayload(parseAjaxJson(response));
+                        renderScanResult(payload.message || 'Library scan completed.', payload.isSuccess);
+                    }).catch(function (error) {
+                        renderScanResult(getErrorMessage(error, 'Failed to scan the library for Oscars.'), false);
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                function rebuildCollections() {
+                    Dashboard.showLoadingMsg();
+                    renderCollectionResult('Rebuilding Oscar collections...', true);
+
+                    ajax({
+                        type: 'POST',
+                        url: getUrl('Plugins/Jellyfin.Oscars/RebuildCollections'),
+                        dataType: 'json'
+                    }).then(function (response) {
+                        var payload = normalizeCollectionSyncPayload(parseAjaxJson(response));
+                        renderCollectionResult(payload.message || 'Oscar collection rebuild completed.', payload.isSuccess);
+                    }).catch(function (error) {
+                        renderCollectionResult(getErrorMessage(error, 'Failed to rebuild Oscar collections.'), false);
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                configPage.addEventListener('pageshow', loadConfiguration);
+                configForm.addEventListener('submit', saveConfiguration);
+                testButton.addEventListener('click', testConnection);
+                scanButton.addEventListener('click', scanLibrary);
+                rebuildCollectionsButton.addEventListener('click', rebuildCollections);
+            })();
+        </script>
+    </div>
+</body>
+</html>

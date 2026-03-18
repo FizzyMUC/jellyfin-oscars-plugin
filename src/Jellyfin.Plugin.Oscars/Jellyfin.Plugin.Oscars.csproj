@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Jellyfin.Plugin.Oscars</AssemblyName>
+    <RootNamespace>Jellyfin.Plugin.Oscars</RootNamespace>
+    <Description>Jellyfin server plugin scaffold for Oscar metadata enrichment.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The official Jellyfin plugin template documentation currently shows Jellyfin.Controller
+      and Jellyfin.Model package references with ExcludeAssets=runtime.
+
+      This version should match the target Jellyfin server version to avoid the plugin being
+      marked NotSupported. It is intentionally kept explicit so it is easy to verify/change.
+    -->
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.3">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Jellyfin.Model" Version="10.11.3">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Configuration\configPage.html" />
+    <EmbeddedResource Include="Configuration\configPage.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Resources\logo.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      <TargetPath>logo.png</TargetPath>
+    </None>
+    <None Update="Resources\winners.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      <TargetPath>Resources\winners.png</TargetPath>
+    </None>
+    <None Update="Resources\nominated.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+      <TargetPath>Resources\nominated.png</TargetPath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="wwwroot\**\.DS_Store" />
+    <Content Include="wwwroot\**">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+</Project>
