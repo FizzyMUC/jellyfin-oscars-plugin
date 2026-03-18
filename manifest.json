@@ -1,0 +1,21 @@
+[
+  {
+    "guid": "c531afa3-de20-4055-aca5-a7cc43adf783",
+    "name": "Jellyfin Oscars",
+    "description": "Jellyfin server plugin that enriches movie metadata with Oscar (Academy Awards) information.",
+    "overview": "Adds Oscar metadata, badges, and optional collections to Jellyfin movies.",
+    "owner": "Pascal Marter",
+    "category": "Metadata",
+    "imageUrl": "<INSERT_LOGO_URL>",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "Initial public release.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "<INSERT_RELEASE_ZIP_URL>",
+        "checksum": "<INSERT_RELEASE_ZIP_SHA256>",
+        "timestamp": "<INSERT_RELEASE_TIMESTAMP_UTC>"
+      }
+    ]
+  }
+]
