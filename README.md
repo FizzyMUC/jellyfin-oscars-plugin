@@ -1,15 +1,13 @@
 # Jellyfin Oscars
 
-Jellyfin Oscars is a Jellyfin server plugin that enriches movie metadata with Oscar (Academy Awards) information. It uses OMDb as its external data source and integrates the derived result into Jellyfin through tags, web UI detail-page badges, and optional library collections.
+A Jellyfin plugin that enriches movie metadata with Oscar (Academy Awards) information, including tags, collections, and optional web UI badges.
 
 ## Features
 
-- Detects Oscar wins and nominations from OMDb
-- Adds Jellyfin Oscar status tags that are then used by the UI badge and collections
-- Displays an Oscar badge on the movie detail page in Jellyfin Web
-- Optionally creates and maintains the `Oscar Winners` and `Oscar Nominees` collections
-- Provides a scheduled background refresh task
-- Provides manual scan and rebuild actions from the plugin settings page
+- Adds "Oscar Winner" and "Oscar Nominated" tags to movies
+- Automatically creates collections for Oscar winners and nominees
+- Optional Oscar badge in the Jellyfin web UI
+- Uses OMDb for metadata enrichment
 
 ## How it works
 
@@ -17,22 +15,27 @@ The plugin requires an OMDb API key and uses IMDb IDs that are already present i
 
 ## Installation
 
-### Repository installation
+### Add Plugin Repository
 
 1. Open the Jellyfin dashboard.
 2. Go to `Plugins` -> `Repositories`.
-3. Add the repository URL:
+3. Add a new repository.
+4. Use this repository URL:
 
    `https://raw.githubusercontent.com/FizzyMUC/jellyfin-oscars-plugin/main/manifest.json`
 
-4. Open `Catalog` and install `Jellyfin Oscars`.
-5. Restart Jellyfin.
+### Install Plugin
+
+1. Go to `Catalog`.
+2. Search for `Jellyfin Oscars`.
+3. Install the plugin.
+4. Restart Jellyfin.
 
 ### Manual installation
 
 1. Download the latest release:
 
-   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.0/jellyfin-oscars-v1.0.0.zip`
+   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.2/jellyfin-oscars-v1.0.2.zip`
 
 2. Extract the release contents into:
 
@@ -43,6 +46,66 @@ The plugin requires an OMDb API key and uses IMDb IDs that are already present i
 Project repository:
 
 `https://github.com/FizzyMUC/jellyfin-oscars-plugin`
+
+## Enable Web UI Badge (Important)
+
+This step is optional, but it is required if you want the Oscar badge to appear in Jellyfin Web.
+
+### Install JavaScript Injector Plugin
+
+1. Go to `Catalog`.
+2. Install `JavaScript Injector`.
+3. Restart Jellyfin.
+
+### Add Script in JavaScript Injector
+
+Use this exact script:
+
+```javascript
+(function () {
+    'use strict';
+
+    if (window.__jellyfinOscarsLoaderInjected) {
+        return;
+    }
+    window.__jellyfinOscarsLoaderInjected = true;
+
+    if (document.querySelector('script[data-jellyfin-oscars-loader="true"]')) {
+        return;
+    }
+
+    var s = document.createElement('script');
+    s.src = '/plugins/Jellyfin.Oscars/scripts/oscarDetailBadge.js';
+    s.setAttribute('data-jellyfin-oscars-loader', 'true');
+    document.head.appendChild(s);
+})();
+```
+
+1. Open `JavaScript Injector` settings.
+2. Add a new script.
+3. Paste the code above.
+4. Enable it.
+5. Save.
+6. Reload your browser.
+
+## Usage
+
+- Run `Scan Library for Oscars` if that task is available, or use the manual scan/rebuild action in the plugin settings
+- Or wait for automatic metadata enrichment to process your library
+- Open a movie detail page in Jellyfin Web
+- The badge appears for movies that have Oscar tags
+
+## Notes
+
+- The badge only works in Jellyfin Web (browser UI)
+- Mobile and TV clients may not support it
+- The badge requires the `JavaScript Injector` plugin
+
+## Troubleshooting
+
+- Badge not visible: verify `JavaScript Injector` is installed and enabled, then reload the browser
+- No tags: make sure OMDb is configured correctly and the movie has an IMDb ID
+- Still not working: try a manual scan or rebuild from the plugin settings page
 
 ## Configuration
 
