@@ -15,7 +15,12 @@ if [[ -z "$version" ]]; then
   exit 1
 fi
 
-zip_name="jellyfin-oscars-v${version}.zip"
+release_version="${version}"
+if [[ "$release_version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\.0$ ]]; then
+  release_version="${BASH_REMATCH[1]}"
+fi
+
+zip_name="jellyfin-oscars-v${release_version}.zip"
 zip_path="$release_dir/$zip_name"
 checksum_path="$zip_path.sha256"
 

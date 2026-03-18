@@ -23,7 +23,7 @@ The plugin requires an OMDb API key and uses IMDb IDs that are already present i
 2. Go to `Plugins` -> `Repositories`.
 3. Add the repository URL:
 
-   `<INSERT_REPOSITORY_URL>`
+   `https://raw.githubusercontent.com/FizzyMUC/jellyfin-oscars-plugin/main/manifest.json`
 
 4. Open `Catalog` and install `Jellyfin Oscars`.
 5. Restart Jellyfin.
@@ -32,7 +32,7 @@ The plugin requires an OMDb API key and uses IMDb IDs that are already present i
 
 1. Download the latest release:
 
-   `<INSERT_RELEASE_ZIP_URL>`
+   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.0/jellyfin-oscars-v1.0.0.zip`
 
 2. Extract the release contents into:
 
@@ -40,17 +40,9 @@ The plugin requires an OMDb API key and uses IMDb IDs that are already present i
 
 3. Restart Jellyfin.
 
-## Releases
+Project repository:
 
-Create the release package with:
-
-```bash
-dotnet build
-dotnet test
-./build-release.sh
-```
-
-The script publishes the plugin to `./artifacts/plugin`, creates a versioned zip in `./artifacts/release`, and writes a matching `.sha256` checksum file.
+`https://github.com/FizzyMUC/jellyfin-oscars-plugin`
 
 ## Configuration
 
