@@ -1,5 +1,7 @@
 # Jellyfin Oscars
 
+<img width="702" height="401" alt="logo" src="https://github.com/user-attachments/assets/4d9f8948-65a4-4939-9231-4d2d29d654f1" />
+
 A Jellyfin plugin that enriches movie metadata with Oscar (Academy Awards) information, including tags, collections, and optional web UI badges.
 
 ## Features
@@ -12,6 +14,22 @@ A Jellyfin plugin that enriches movie metadata with Oscar (Academy Awards) infor
 ## How it works
 
 The plugin requires an OMDb API key and uses IMDb IDs that are already present in Jellyfin metadata. For eligible movies, it requests the OMDb `Awards` field, parses Oscar-related results, normalizes them into a simple internal state, and applies the result to Jellyfin items as tags. Those tags are then used for the web badge and for Oscar collection membership.
+
+## Screenshots
+
+<img width="831" height="444" alt="Screenshot 2026-03-19 at 12 24 06" src="https://github.com/user-attachments/assets/9dcc94fb-902d-40a2-80bc-7ace9d266ead" />
+
+
+Jellyfin Oscars neatly adds curated Collections for Oscar Nominees or Oscar Winners. Technically each winner was a nominee once so you decide whether you want to include them.
+
+<img width="1483" height="767" alt="Screenshot 2026-03-19 at 12 24 52" src="https://github.com/user-attachments/assets/d6a32505-5b9f-4c49-9690-b4ecac532b68" />
+
+Collections include all movies that match said criteria. They are sorted automatically.
+
+<img width="977" height="411" alt="Screenshot 2026-03-19 at 12 25 09" src="https://github.com/user-attachments/assets/19641480-ac7b-4859-9c36-f1fc8cc8d435" />
+
+Each movie detail screen gets a little badge/icon next to the ratings that indicates if it is an Oscar Winner or Nominee.
+
 
 ## Installation
 
