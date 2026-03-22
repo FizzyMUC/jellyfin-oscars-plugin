@@ -6,9 +6,14 @@ A Jellyfin plugin that enriches movie metadata with Oscar (Academy Awards) infor
 
 ## Features
 
-- Adds "Oscar Winner" and "Oscar Nominated" tags to movies
-- Automatically creates collections for Oscar winners and nominees
-- Optional Oscar badge in the Jellyfin web UI
+- Adds Oscar winner and nominee tags to movies
+- Displays an Oscar badge in Jellyfin Web for tagged movies
+- Automatically creates and maintains `Oscar Winners` and `Oscar Nominees` collections
+- Supports collection posters for Oscar collections
+- Uses async library scanning so manual scans start immediately and continue in the background
+- Processes libraries in batches with persistent progress across runs and restarts
+- Prevents overlapping manual scans and provides clearer logging during refreshes
+- Integrates with `JavaScript Injector` automatically when that plugin is installed
 - Uses OMDb for metadata enrichment
 
 ## How it works
@@ -28,7 +33,7 @@ Collections include all movies that match said criteria. They are sorted automat
 
 <img width="977" height="411" alt="Screenshot 2026-03-19 at 12 25 09" src="https://github.com/user-attachments/assets/19641480-ac7b-4859-9c36-f1fc8cc8d435" />
 
-Each movie detail screen gets a little badge/icon next to the ratings that indicates if it is an Oscar Winner or Nominee.
+Each movie detail screen gets a badge next to the ratings that indicates if it is an Oscar Winner or Oscar Nominee.
 
 
 ## Installation
@@ -53,7 +58,7 @@ Each movie detail screen gets a little badge/icon next to the ratings that indic
 
 1. Download the latest release:
 
-   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.2/jellyfin-oscars-v1.0.2.zip`
+   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.3/jellyfin-oscars-v1.0.3.zip`
 
 2. Extract the release contents into:
 
@@ -65,11 +70,57 @@ Project repository:
 
 `https://github.com/FizzyMUC/jellyfin-oscars-plugin`
 
-## Enable Web UI Badge (Important)
+## Configuration
 
-This step is optional, but it is required if you want the Oscar badge to appear in Jellyfin Web.
+The plugin is configured from the Jellyfin plugin settings page.
 
-### Install JavaScript Injector Plugin
+### OMDb API Key
+
+This setting is required for enrichment. You can request an OMDb API key at:
+
+https://www.omdbapi.com/apikey.aspx
+
+### Enable Oscar enrichment
+
+Enables or disables Oscar metadata enrichment for eligible movies. When disabled, the plugin does not query OMDb or update Oscar tags.
+
+### Cache duration
+
+Controls how long OMDb-derived results are cached before they are refreshed. Longer values reduce OMDb requests. Shorter values refresh metadata more aggressively.
+
+### Scheduled refresh
+
+Enables the plugin's background refresh task. When enabled, Jellyfin can refresh Oscar metadata automatically without manual interaction.
+
+### Refresh batch size
+
+Controls how many movies are processed in one run. Lower values reduce load and spread work over more runs. Higher values refresh faster but may produce more OMDb traffic in a single pass.
+
+### Create Oscar Winners collection
+
+When enabled, the plugin maintains a collection named `Oscar Winners`.
+
+### Create Oscar Nominees collection
+
+When enabled, the plugin maintains a collection named `Oscar Nominees`.
+
+### Include winners in nominees collection
+
+When enabled, movies tagged as Oscar winners are also included in `Oscar Nominees`. When disabled, the nominees collection contains only non-winning nominees.
+
+### Collection disable behavior
+
+If `Create Oscar Winners collection` is disabled, the plugin deletes the `Oscar Winners` collection. If `Create Oscar Nominees collection` is disabled, the plugin deletes the `Oscar Nominees` collection. Deletion is handled during manual rebuild and scheduled sync runs.
+
+## Optional integrations
+
+### JavaScript Injector
+
+If `JavaScript Injector` is installed, Jellyfin Oscars can register its badge script automatically. In most setups, no manual script entry is needed.
+
+If automatic registration does not work in your environment, you can still add the script manually.
+
+### Install JavaScript Injector plugin
 
 1. Go to `Catalog`.
 2. Install `JavaScript Injector`.
@@ -81,9 +132,9 @@ Repository:
 
 If you do not already have it installed, follow the installation instructions in that repository.
 
-### Add Script in JavaScript Injector
+### Manual fallback
 
-Use this exact script:
+Use this script only if the badge does not appear automatically:
 
 ```javascript
 (function () {
@@ -114,8 +165,9 @@ Use this exact script:
 
 ## Usage
 
-- Run `Scan Library for Oscars` if that task is available, or use the manual scan/rebuild action in the plugin settings
-- Or wait for automatic metadata enrichment to process your library
+- Start a manual scan or rebuild from the plugin settings, or wait for the scheduled refresh
+- Manual scans now run in the background, so the settings page returns immediately
+- Library refreshes continue in batches and keep their progress across restarts
 - Open a movie detail page in Jellyfin Web
 - The badge appears for movies that have Oscar tags
 
@@ -123,55 +175,13 @@ Use this exact script:
 
 - The badge only works in Jellyfin Web (browser UI)
 - Mobile and TV clients may not support it
-- The badge requires the `JavaScript Injector` plugin
+- `JavaScript Injector` is optional, but recommended for the smoothest badge integration
 
 ## Troubleshooting
 
 - Badge not visible: verify `JavaScript Injector` is installed and enabled, then reload the browser
 - No tags: make sure OMDb is configured correctly and the movie has an IMDb ID
-- Still not working: try a manual scan or rebuild from the plugin settings page
-
-## Configuration
-
-The plugin is configured from the Jellyfin plugin settings page.
-
-### OMDb API Key
-
-This setting is required for enrichment. You can request an OMDb API key at:
-
-https://www.omdbapi.com/apikey.aspx
-
-### Enable Oscar enrichment
-
-Enables or disables Oscar metadata enrichment for eligible movies. When disabled, the plugin does not query OMDb or update Oscar tags.
-
-### Cache duration
-
-Controls how long OMDb-derived results are cached before they are refreshed. Longer values reduce OMDb requests. Shorter values refresh metadata more aggressively.
-
-### Scheduled refresh
-
-Enables the plugin's background refresh task. When enabled, Jellyfin can run Oscar metadata refresh automatically without manual interaction.
-
-### Refresh batch size
-
-Controls how many movies are processed in one scheduled run. Lower values reduce load and spread work over more runs. Higher values refresh faster but may produce more OMDb traffic in a single pass.
-
-### Create Oscar Winners collection
-
-When enabled, the plugin maintains a collection named `Oscar Winners`.
-
-### Create Oscar Nominees collection
-
-When enabled, the plugin maintains a collection named `Oscar Nominees`.
-
-### Include winners in nominees collection
-
-When enabled, movies tagged as Oscar winners are also included in `Oscar Nominees`. When disabled, the nominees collection contains only non-winning nominees.
-
-### Collection disable behavior
-
-If `Create Oscar Winners collection` is disabled, the plugin deletes the `Oscar Winners` collection. If `Create Oscar Nominees collection` is disabled, the plugin deletes the `Oscar Nominees` collection. Deletion is handled during manual rebuild and scheduled sync runs.
+- Still not working: start a manual scan, then check the plugin logs for progress and OMDb errors
 
 ## Collections
 
@@ -188,9 +198,9 @@ For tagged movies, the plugin adds an Oscar badge to the item detail page in Jel
 - OMDb request limits still apply, especially on the free tier.
 - OMDb exposes awards information as text, so the plugin has to parse and normalize that field rather than consume a strongly structured awards model.
 
-## Development
+## Roadmap
 
-This project is implemented as a Jellyfin server plugin in .NET and uses Jellyfin plugin APIs together with the OMDb HTTP API.
+Longer term, the plugin is intended to move beyond OMDb by using Oscar Atlas as a dedicated structured awards source.
 
 ## License
 
