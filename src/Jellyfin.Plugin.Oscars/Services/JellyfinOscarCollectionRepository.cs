@@ -83,7 +83,7 @@ public sealed class JellyfinOscarCollectionRepository : IOscarCollectionReposito
         return Task.FromResult(true);
     }
 
-    public async Task<OscarCollectionArtworkApplyResult> SetPrimaryImageFromPluginResourceAsync(Guid collectionId, string resourceFileName, CancellationToken cancellationToken = default)
+    public async Task<OscarCollectionArtworkApplyResult> SetImageFromPluginResourceAsync(Guid collectionId, string resourceFileName, ImageType imageType, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceFileName);
         cancellationToken.ThrowIfCancellationRequested();
@@ -96,9 +96,12 @@ public sealed class JellyfinOscarCollectionRepository : IOscarCollectionReposito
             };
         }
 
-        if (collection.HasImage(ImageType.Primary, 0) || !string.IsNullOrWhiteSpace(collection.PrimaryImagePath))
+        if (HasImage(collection, imageType))
         {
-            return new OscarCollectionArtworkApplyResult();
+            return new OscarCollectionArtworkApplyResult
+            {
+                AlreadyPresent = true
+            };
         }
 
         var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
@@ -120,7 +123,7 @@ public sealed class JellyfinOscarCollectionRepository : IOscarCollectionReposito
         }
 
         await using var stream = File.OpenRead(resourcePath);
-        await _providerManager.SaveImage(collection, stream, "image/png", ImageType.Primary, null, cancellationToken).ConfigureAwait(false);
+        await _providerManager.SaveImage(collection, stream, "image/png", imageType, null, cancellationToken).ConfigureAwait(false);
         return new OscarCollectionArtworkApplyResult
         {
             Applied = true
@@ -156,6 +159,17 @@ public sealed class JellyfinOscarCollectionRepository : IOscarCollectionReposito
             WasCreated = wasCreated,
             HasPrimaryImage = collection.HasImage(ImageType.Primary, 0) || !string.IsNullOrWhiteSpace(collection.PrimaryImagePath),
             ItemIds = itemIds
+        };
+    }
+
+    private static bool HasImage(BoxSet collection, ImageType imageType)
+    {
+        return imageType switch
+        {
+            ImageType.Primary => collection.HasImage(ImageType.Primary, 0) || !string.IsNullOrWhiteSpace(collection.PrimaryImagePath),
+            ImageType.Thumb => collection.HasImage(ImageType.Thumb, 0),
+            ImageType.Backdrop => collection.HasImage(ImageType.Backdrop, 0),
+            _ => collection.HasImage(imageType, 0)
         };
     }
 }

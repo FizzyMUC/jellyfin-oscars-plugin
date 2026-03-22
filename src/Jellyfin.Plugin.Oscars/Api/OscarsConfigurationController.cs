@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Jellyfin.Plugin.Oscars.Services;
 using MediaBrowser.Common.Api;
+using MediaBrowser.Model.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -18,18 +19,21 @@ namespace Jellyfin.Plugin.Oscars.Api;
 public sealed class OscarsConfigurationController : ControllerBase
 {
     private readonly IOscarCollectionSyncService _collectionSyncService;
-    private readonly IOscarLibraryScanService _libraryScanService;
+    private readonly IManualOscarScanDispatcher _manualOscarScanDispatcher;
+    private readonly ILibraryMovieRepository _libraryMovieRepository;
     private readonly IOmdbClient _omdbClient;
     private readonly ILogger<OscarsConfigurationController> _logger;
 
     public OscarsConfigurationController(
         IOscarCollectionSyncService collectionSyncService,
-        IOscarLibraryScanService libraryScanService,
+        IManualOscarScanDispatcher manualOscarScanDispatcher,
+        ILibraryMovieRepository libraryMovieRepository,
         IOmdbClient omdbClient,
         ILogger<OscarsConfigurationController> logger)
     {
         _collectionSyncService = collectionSyncService;
-        _libraryScanService = libraryScanService;
+        _manualOscarScanDispatcher = manualOscarScanDispatcher;
+        _libraryMovieRepository = libraryMovieRepository;
         _omdbClient = omdbClient;
         _logger = logger;
     }
@@ -62,27 +66,28 @@ public sealed class OscarsConfigurationController : ControllerBase
 
     [HttpPost("ScanLibrary")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult<LibraryScanResultDto>> ScanLibrary(CancellationToken cancellationToken)
+    public ActionResult<LibraryScanResultDto> ScanLibrary()
     {
         _logger.LogInformation("Manual Oscar library scan endpoint invoked.");
-        var result = await _libraryScanService.ScanLibraryAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation(
-            "Manual Oscar library scan endpoint completed. Success={IsSuccess}, TotalMoviesFound={TotalMoviesFound}, MoviesEligible={MoviesEligible}, MoviesUpdated={MoviesUpdated}, MoviesSkipped={MoviesSkipped}.",
-            result.IsSuccess,
-            result.TotalMoviesFound,
-            result.MoviesEligible,
-            result.MoviesUpdated,
-            result.MoviesSkipped);
-
-        return Ok(new LibraryScanResultDto(
-            result.IsSuccess,
+        var result = _manualOscarScanDispatcher.StartManualScan();
+        var payload = new LibraryScanResultDto(
+            result.Started,
             result.Message,
-            result.TotalMoviesFound,
-            result.MoviesEligible,
-            result.MoviesUpdated,
-            result.MoviesSkipped,
-            result.OmdbRequestsMade,
-            new Dictionary<string, int>(result.ReasonCounts, StringComparer.OrdinalIgnoreCase)));
+            0,
+            0,
+            0,
+            0,
+            0,
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
+
+        if (!result.Started)
+        {
+            _logger.LogInformation("Manual Oscar library scan endpoint ignored because a scan is already in progress.");
+            return Conflict(payload);
+        }
+
+        _logger.LogInformation("Manual Oscar library scan endpoint accepted and returned immediately.");
+        return Accepted(payload);
     }
 
     [HttpPost("RebuildCollections")]
@@ -112,12 +117,22 @@ public sealed class OscarsConfigurationController : ControllerBase
             new Dictionary<string, int>(result.ReasonCounts, StringComparer.OrdinalIgnoreCase)));
     }
 
+    [HttpGet("Libraries")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<IReadOnlyList<MovieLibraryDto>> GetLibraries()
+    {
+        var libraries = _libraryMovieRepository.GetMovieLibraries()
+            .Select(library => new MovieLibraryDto(library.Id, library.Name))
+            .ToArray();
+        return Ok(libraries);
+    }
+
     [HttpPost("ConfigurationLog")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult LogConfigurationEvent([FromBody][Required] ConfigurationLogRequest request)
     {
         _logger.LogDebug(
-            "Configuration page event {EventName}. HasApiKey={HasApiKey}, EnrichmentEnabled={EnableOscarEnrichment}, CacheDurationHours={CacheDurationHours}, ScheduledRefreshEnabled={EnableScheduledRefresh}, RefreshBatchSize={RefreshBatchSize}, WinnersCollectionEnabled={CreateOscarWinnersCollection}, NomineesCollectionEnabled={CreateOscarNomineesCollection}, IncludeWinnersInNominees={IncludeWinnersInNomineesCollection}, DefaultCollectionArtworkEnabled={SetDefaultArtworkForOscarCollections}.",
+            "Configuration page event {EventName}. HasApiKey={HasApiKey}, EnrichmentEnabled={EnableOscarEnrichment}, CacheDurationHours={CacheDurationHours}, ScheduledRefreshEnabled={EnableScheduledRefresh}, RefreshBatchSize={RefreshBatchSize}, WinnersCollectionEnabled={CreateOscarWinnersCollection}, NomineesCollectionEnabled={CreateOscarNomineesCollection}, IncludeWinnersInNominees={IncludeWinnersInNomineesCollection}, DefaultCollectionArtworkEnabled={SetDefaultArtworkForOscarCollections}, ExcludedCollectionLibraryCount={ExcludedCollectionLibraryCount}.",
             request.EventName,
             request.HasApiKey,
             request.EnableOscarEnrichment,
@@ -127,7 +142,8 @@ public sealed class OscarsConfigurationController : ControllerBase
             request.CreateOscarWinnersCollection,
             request.CreateOscarNomineesCollection,
             request.IncludeWinnersInNomineesCollection,
-            request.SetDefaultArtworkForOscarCollections);
+            request.SetDefaultArtworkForOscarCollections,
+            request.ExcludedCollectionLibraryCount);
 
         return Ok();
     }
@@ -142,7 +158,10 @@ public sealed class OscarsConfigurationController : ControllerBase
         bool CreateOscarWinnersCollection,
         bool CreateOscarNomineesCollection,
         bool IncludeWinnersInNomineesCollection,
-        bool SetDefaultArtworkForOscarCollections);
+        bool SetDefaultArtworkForOscarCollections,
+        int ExcludedCollectionLibraryCount);
+
+    public sealed record MovieLibraryDto(Guid Id, string Name);
 
     public sealed record OmdbConnectionTestResultDto(bool IsSuccess, string Message, string? ErrorCode);
 

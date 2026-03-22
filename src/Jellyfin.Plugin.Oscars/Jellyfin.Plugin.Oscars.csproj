@@ -2,11 +2,10 @@
   <PropertyGroup>
     <AssemblyName>Jellyfin.Plugin.Oscars</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.Oscars</RootNamespace>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <Version>1.0.0.0</Version>
-    <Description>Jellyfin server plugin that enriches movie metadata with Oscar (Academy Awards) information.</Description>
+    <Description>Jellyfin server plugin scaffold for Oscar metadata enrichment.</Description>
+    <Version>1.0.3.0</Version>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,36 +30,50 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="meta.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-      <TargetPath>meta.json</TargetPath>
-    </None>
     <None Update="Resources\logo.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
       <TargetPath>logo.png</TargetPath>
     </None>
-    <None Update="Resources\winners.png">
+    <None Update="Resources\*.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-      <TargetPath>Resources\winners.png</TargetPath>
-    </None>
-    <None Update="Resources\nominated.png">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-      <TargetPath>Resources\nominated.png</TargetPath>
+      <TargetPath>Resources\%(Filename)%(Extension)</TargetPath>
     </None>
   </ItemGroup>
 
   <ItemGroup>
-    <None Remove="wwwroot/.DS_Store" />
-    <None Remove="wwwroot/**/.DS_Store" />
-    <Content Remove="wwwroot/.DS_Store" />
-    <Content Remove="wwwroot/**/.DS_Store" />
+    <Content Remove="wwwroot\**\.DS_Store" />
     <Content Include="wwwroot\**">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
+
+  <Target Name="WritePluginMetaJson" AfterTargets="Publish">
+    <ItemGroup>
+      <PluginMetaJsonLines Include="{" />
+      <PluginMetaJsonLines Include='  "category": "",' />
+      <PluginMetaJsonLines Include='  "changelog": "",' />
+      <PluginMetaJsonLines Include='  "description": "",' />
+      <PluginMetaJsonLines Include='  "guid": "c531afa3-de20-4055-aca5-a7cc43adf783",' />
+      <PluginMetaJsonLines Include='  "name": "Jellyfin Oscars",' />
+      <PluginMetaJsonLines Include='  "overview": "",' />
+      <PluginMetaJsonLines Include='  "owner": "",' />
+      <PluginMetaJsonLines Include='  "targetAbi": "10.11.6.0",' />
+      <PluginMetaJsonLines Include='  "timestamp": "0001-01-01T00:00:00.0000000Z",' />
+      <PluginMetaJsonLines Include='  "version": "$(Version)",' />
+      <PluginMetaJsonLines Include='  "status": "Active",' />
+      <PluginMetaJsonLines Include='  "autoUpdate": false,' />
+      <PluginMetaJsonLines Include='  "assemblies": [],' />
+      <PluginMetaJsonLines Include='  "imageUrl": "logo.png"' />
+      <PluginMetaJsonLines Include="}" />
+    </ItemGroup>
+
+    <WriteLinesToFile
+      File="$(PublishDir)meta.json"
+      Lines="@(PluginMetaJsonLines)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true" />
+  </Target>
 </Project>

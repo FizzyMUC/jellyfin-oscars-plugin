@@ -1,6 +1,7 @@
 using Jellyfin.Plugin.Oscars.Configuration;
 using Jellyfin.Plugin.Oscars.Models;
 using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Oscars.Services;
@@ -12,8 +13,10 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
 {
     public const string OscarWinnersCollectionName = "Oscar Winners";
     public const string OscarNomineesCollectionName = "Oscar Nominees";
-    private const string OscarWinnersArtworkFileName = "winners.png";
-    private const string OscarNomineesArtworkFileName = "nominated.png";
+    private const string OscarWinnersPosterFileName = "oscar-winners-portrait.png";
+    private const string OscarNomineesPosterFileName = "oscar-nominees-portrait.png";
+    private const string OscarWinnersLandscapeFileName = "oscar-winners.png";
+    private const string OscarNomineesLandscapeFileName = "oscar-nominees.png";
 
     private readonly IPluginConfigurationService _configurationService;
     private readonly ILibraryMovieRepository _movieRepository;
@@ -39,6 +42,10 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
         var nomineesEnabled = configuration.CreateOscarNomineesCollection;
         var includeWinnersInNominees = configuration.IncludeWinnersInNomineesCollection;
         var defaultArtworkEnabled = configuration.SetDefaultArtworkForOscarCollections;
+        var excludedLibraryIds = configuration.ExcludedOscarCollectionLibraryIds
+            .Select(value => Guid.TryParse(value, out var libraryId) ? libraryId : Guid.Empty)
+            .Where(value => value != Guid.Empty)
+            .ToHashSet();
 
         _logger.LogInformation(
             "{Origin} Oscar collection sync started. WinnersEnabled={WinnersEnabled}, NomineesEnabled={NomineesEnabled}, IncludeWinnersInNominees={IncludeWinnersInNominees}, DefaultArtworkEnabled={DefaultArtworkEnabled}.",
@@ -49,12 +56,40 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
             defaultArtworkEnabled);
 
         var movies = _movieRepository.GetLocalMovies();
-        var winnerMovies = movies.Where(IsOscarWinner).ToList();
-        var nominatedMovies = movies.Where(IsOscarNominated).ToList();
+        var excludedLibraryNames = movies
+            .SelectMany(movie => movie.Libraries)
+            .Where(library => excludedLibraryIds.Contains(library.Id))
+            .DistinctBy(library => library.Id)
+            .OrderBy(library => library.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (excludedLibraryIds.Count > 0)
+        {
+            _logger.LogInformation(
+                "{Origin} Oscar collection sync exclusions. ExcludedLibraryIds={ExcludedLibraryIds}, ExcludedLibraryNames={ExcludedLibraryNames}.",
+                origin,
+                string.Join(", ", excludedLibraryIds.OrderBy(id => id)),
+                string.Join(", ", excludedLibraryNames.Select(library => library.Name)));
+        }
+
+        var winnerMovies = movies.Where(movie => IsOscarWinner(movie.Movie)).ToList();
+        var nominatedMovies = movies.Where(movie => IsOscarNominated(movie.Movie)).ToList();
+        var excludedWinnerMovieIds = winnerMovies
+            .Where(movie => IsExcludedFromCollections(movie, excludedLibraryIds))
+            .Select(movie => movie.Movie.Id);
+        var excludedNomineeMovieIds = nominatedMovies
+            .Where(movie => IsExcludedFromCollections(movie, excludedLibraryIds))
+            .Select(movie => movie.Movie.Id);
+        var excludedMovieIds = excludedWinnerMovieIds
+            .Concat(excludedNomineeMovieIds)
+            .ToHashSet();
+        var excludedWinnerCount = winnerMovies.Count(movie => IsExcludedFromCollections(movie, excludedLibraryIds));
+        var excludedNomineeCount = nominatedMovies.Count(movie => IsExcludedFromCollections(movie, excludedLibraryIds));
+        winnerMovies = winnerMovies.Where(movie => !IsExcludedFromCollections(movie, excludedLibraryIds)).ToList();
+        nominatedMovies = nominatedMovies.Where(movie => !IsExcludedFromCollections(movie, excludedLibraryIds)).ToList();
         var nomineesMembership = includeWinnersInNominees
             ? nominatedMovies
                 .Concat(winnerMovies)
-                .DistinctBy(movie => movie.Id)
+                .DistinctBy(movie => movie.Movie.Id)
                 .ToList()
             : nominatedMovies;
 
@@ -63,12 +98,18 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
         var collectionsProcessed = 0;
         var moviesAdded = 0;
         var moviesRemoved = 0;
+        var collectionExcludedMovieCount = excludedMovieIds.Count;
+        if (collectionExcludedMovieCount > 0)
+        {
+            reasonCounts["collection_library_excluded"] = collectionExcludedMovieCount;
+        }
+        _logger.LogInformation("{Origin} Oscar collection sync skipped {SkippedCount} tagged candidate items due to collection library exclusions.", origin, collectionExcludedMovieCount);
 
         if (winnersEnabled)
         {
             var outcome = await SyncOneCollectionAsync(
                 OscarWinnersCollectionName,
-                winnerMovies.Select(movie => movie.Id).ToHashSet(),
+                winnerMovies.Select(movie => movie.Movie.Id).ToHashSet(),
                 defaultArtworkEnabled,
                 origin,
                 cancellationToken).ConfigureAwait(false);
@@ -91,7 +132,7 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
         {
             var outcome = await SyncOneCollectionAsync(
                 OscarNomineesCollectionName,
-                nomineesMembership.Select(movie => movie.Id).ToHashSet(),
+                nomineesMembership.Select(movie => movie.Movie.Id).ToHashSet(),
                 defaultArtworkEnabled,
                 origin,
                 cancellationToken).ConfigureAwait(false);
@@ -111,8 +152,8 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
         }
 
         var matchedMovieIds = new HashSet<Guid>();
-        matchedMovieIds.UnionWith(winnerMovies.Select(movie => movie.Id));
-        matchedMovieIds.UnionWith(nomineesMembership.Select(movie => movie.Id));
+        matchedMovieIds.UnionWith(winnerMovies.Select(movie => movie.Movie.Id));
+        matchedMovieIds.UnionWith(nomineesMembership.Select(movie => movie.Movie.Id));
         var moviesSkipped = Math.Max(0, movies.Count - matchedMovieIds.Count);
         if (moviesSkipped > 0)
         {
@@ -286,40 +327,67 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
             return;
         }
 
-        var artworkFileName = GetArtworkFileName(collection.Name);
-        if (artworkFileName is null)
+        var artworkFiles = GetArtworkFiles(collection.Name);
+        if (artworkFiles is null)
         {
             return;
         }
 
-        _logger.LogInformation("{Origin} Applying default artwork to {CollectionName} collection.", origin, collection.Name);
-        var outcome = await _collectionRepository.SetPrimaryImageFromPluginResourceAsync(collection.Id, artworkFileName, cancellationToken).ConfigureAwait(false);
+        await ApplyDefaultArtworkAsync(collection, artworkFiles.Value.PosterFileName, ImageType.Primary, origin, cancellationToken).ConfigureAwait(false);
+        await ApplyDefaultArtworkAsync(collection, artworkFiles.Value.LandscapeFileName, ImageType.Thumb, origin, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ApplyDefaultArtworkAsync(
+        OscarCollectionInfo collection,
+        string resourceFileName,
+        ImageType imageType,
+        string origin,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "{Origin} Applying default {ImageType} artwork to {CollectionName} collection from {ResourceFileName}.",
+            origin,
+            imageType,
+            collection.Name,
+            resourceFileName);
+
+        var outcome = await _collectionRepository
+            .SetImageFromPluginResourceAsync(collection.Id, resourceFileName, imageType, cancellationToken)
+            .ConfigureAwait(false);
+
         if (outcome.Applied)
         {
-            collection.HasPrimaryImage = true;
+            if (imageType == ImageType.Primary)
+            {
+                collection.HasPrimaryImage = true;
+            }
+
+            return;
+        }
+
+        if (outcome.AlreadyPresent)
+        {
+            _logger.LogDebug("{Origin} Oscar collection {CollectionName}: skipping {ImageType} artwork (already present).", origin, collection.Name, imageType);
             return;
         }
 
         if (outcome.FileMissing)
         {
-            _logger.LogWarning("{Origin} Oscar collection {CollectionName}: artwork file not found.", origin, collection.Name);
+            _logger.LogWarning("{Origin} Oscar collection {CollectionName}: {ImageType} artwork file {ResourceFileName} not found.", origin, collection.Name, imageType, resourceFileName);
             return;
         }
 
         if (outcome.CollectionMissing)
         {
-            _logger.LogWarning("{Origin} Oscar collection {CollectionName}: collection not found when applying artwork.", origin, collection.Name);
-            return;
+            _logger.LogWarning("{Origin} Oscar collection {CollectionName}: collection not found when applying {ImageType} artwork.", origin, collection.Name, imageType);
         }
-
-        _logger.LogDebug("{Origin} Oscar collection {CollectionName}: skipping artwork (already present).", origin, collection.Name);
     }
 
-    private static string? GetArtworkFileName(string collectionName)
+    private static (string PosterFileName, string LandscapeFileName)? GetArtworkFiles(string collectionName)
         => collectionName switch
         {
-            OscarWinnersCollectionName => OscarWinnersArtworkFileName,
-            OscarNomineesCollectionName => OscarNomineesArtworkFileName,
+            OscarWinnersCollectionName => (OscarWinnersPosterFileName, OscarWinnersLandscapeFileName),
+            OscarNomineesCollectionName => (OscarNomineesPosterFileName, OscarNomineesLandscapeFileName),
             _ => null
         };
 
@@ -331,6 +399,9 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
 
     private static bool HasTag(Movie movie, string tag)
         => movie.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsExcludedFromCollections(OscarLibraryMovieInfo movie, IReadOnlySet<Guid> excludedLibraryIds)
+        => excludedLibraryIds.Count > 0 && movie.Libraries.Any(library => excludedLibraryIds.Contains(library.Id));
 
     private static void Merge(IDictionary<string, int> target, IReadOnlyDictionary<string, int> source)
     {

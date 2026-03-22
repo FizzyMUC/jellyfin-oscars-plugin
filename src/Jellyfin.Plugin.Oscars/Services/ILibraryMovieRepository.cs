@@ -1,3 +1,4 @@
+using Jellyfin.Plugin.Oscars.Models;
 using MediaBrowser.Controller.Entities.Movies;
 
 namespace Jellyfin.Plugin.Oscars.Services;
@@ -7,7 +8,9 @@ namespace Jellyfin.Plugin.Oscars.Services;
 /// </summary>
 public interface ILibraryMovieRepository
 {
-    IReadOnlyList<Movie> GetLocalMovies();
+    IReadOnlyList<OscarLibraryMovieInfo> GetLocalMovies();
+
+    IReadOnlyList<OscarLibraryReference> GetMovieLibraries();
 
     Task PersistAsync(Movie movie, CancellationToken cancellationToken = default);
 }

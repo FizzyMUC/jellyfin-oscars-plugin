@@ -24,4 +24,6 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool IncludeWinnersInNomineesCollection { get; set; }
 
     public bool SetDefaultArtworkForOscarCollections { get; set; } = true;
+
+    public string[] ExcludedOscarCollectionLibraryIds { get; set; } = [];
 }

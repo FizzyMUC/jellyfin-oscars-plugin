@@ -1,6 +1,8 @@
 (function () {
     'use strict';
 
+    console.log("[Jellyfin Oscars] script loaded");
+
     var debugEnabled = !!window.__jellyfinOscarsDebug;
 
     if (window.__jellyfinOscarsInitialized || window.__oscarsBadgeInitialized) {
@@ -338,7 +340,7 @@
         if (normalizedTags.indexOf('oscar nominated') !== -1) {
             return {
                 cssClass: badgeClassName + '--nominated',
-                text: 'Oscar Nominated'
+                text: 'Oscar Nominee'
             };
         }
 

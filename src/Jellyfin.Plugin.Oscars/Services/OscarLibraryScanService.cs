@@ -12,17 +12,20 @@ public sealed class OscarLibraryScanService : IOscarLibraryScanService
     private readonly IPluginConfigurationService _configurationService;
     private readonly ILibraryMovieRepository _movieRepository;
     private readonly IOscarMovieProcessingService _movieProcessingService;
+    private readonly IOscarScanStateService _scanStateService;
     private readonly ILogger<OscarLibraryScanService> _logger;
 
     public OscarLibraryScanService(
         IPluginConfigurationService configurationService,
         ILibraryMovieRepository movieRepository,
         IOscarMovieProcessingService movieProcessingService,
+        IOscarScanStateService scanStateService,
         ILogger<OscarLibraryScanService> logger)
     {
         _configurationService = configurationService;
         _movieRepository = movieRepository;
         _movieProcessingService = movieProcessingService;
+        _scanStateService = scanStateService;
         _logger = logger;
     }
 
@@ -52,37 +55,74 @@ public sealed class OscarLibraryScanService : IOscarLibraryScanService
         }
 
         _logger.LogInformation(
-            "{Origin} Oscar library scan started. MaxEligibleMoviesToProcess={MaxEligibleMoviesToProcess}.",
+            "{Origin} Oscar library scan started. ConfiguredBatchSize={ConfiguredBatchSize}, EffectiveBatchSize={EffectiveBatchSize}, MaxEligibleMoviesToProcess={MaxEligibleMoviesToProcess}.",
             request.Origin,
+            Math.Max(1, configuration.RefreshBatchSize),
+            request.MaxEligibleMoviesToProcess.GetValueOrDefault(Math.Max(1, configuration.RefreshBatchSize)),
             request.MaxEligibleMoviesToProcess);
         var movies = _movieRepository.GetLocalMovies();
+        var scanState = await _scanStateService.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
 
         var reasonCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var moviesEligible = 0;
         var moviesProcessed = 0;
         var moviesUpdated = 0;
+        var moviesNoChange = 0;
+        var moviesWithoutOscarData = 0;
+        var moviesFailed = 0;
         var omdbRequestsMade = 0;
-        var maxEligibleMoviesToProcess = request.MaxEligibleMoviesToProcess.GetValueOrDefault(int.MaxValue);
+        var configuredBatchSize = Math.Max(1, configuration.RefreshBatchSize);
+        var maxEligibleMoviesToProcess = request.MaxEligibleMoviesToProcess.GetValueOrDefault(configuredBatchSize);
+        var eligibleMovies = movies
+            .Where(movie => !string.IsNullOrWhiteSpace(movie.Movie.GetProviderId(MetadataProvider.Imdb)))
+            .ToList();
+        var uncheckedCount = eligibleMovies.Count(movie => !scanState.Items.TryGetValue(movie.Movie.Id, out var itemState) || itemState.LastOscarScanUtc is null);
+        var selectionMode = uncheckedCount > 0
+            ? "unchecked_first"
+            : "oldest_scanned_first";
+        var selectedMovies = eligibleMovies
+            .OrderBy(movie => scanState.Items.TryGetValue(movie.Movie.Id, out var itemState) && itemState.LastOscarScanUtc.HasValue ? 1 : 0)
+            .ThenBy(movie => scanState.Items.TryGetValue(movie.Movie.Id, out var itemState) ? itemState.LastOscarScanUtc ?? DateTimeOffset.MinValue : DateTimeOffset.MinValue)
+            .ThenBy(movie => movie.Movie.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(movie => movie.Movie.Id)
+            .Take(maxEligibleMoviesToProcess)
+            .ToList();
+        var uncheckedSelectionsRecorded = 0;
+        moviesEligible = eligibleMovies.Count;
 
-        foreach (var movie in movies)
+        foreach (var movieInfo in movies)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(movie.GetProviderId(MetadataProvider.Imdb)))
+            if (string.IsNullOrWhiteSpace(movieInfo.Movie.GetProviderId(MetadataProvider.Imdb)))
             {
                 Increment(reasonCounts, ToReasonKey(OscarMovieProcessOutcome.MissingImdbId));
-                continue;
             }
+        }
 
-            moviesEligible++;
-            if (moviesProcessed >= maxEligibleMoviesToProcess)
-            {
-                Increment(reasonCounts, "batch_limit_reached");
-                continue;
-            }
+        var batchLimitCount = Math.Max(0, eligibleMovies.Count - selectedMovies.Count);
+        if (batchLimitCount > 0)
+        {
+            Increment(reasonCounts, "batch_limit_reached", batchLimitCount);
+        }
+
+        _logger.LogInformation(
+            "{Origin} Oscar scan candidate selection. TotalCandidates={TotalCandidates}, BatchSize={BatchSize}, UncheckedCount={UncheckedCount}, SelectedBatchCount={SelectedBatchCount}, CandidatesNotSelected={CandidatesNotSelected}, SelectionMode={SelectionMode}.",
+            request.Origin,
+            eligibleMovies.Count,
+            maxEligibleMoviesToProcess,
+            uncheckedCount,
+            selectedMovies.Count,
+            batchLimitCount,
+            selectionMode);
+
+        foreach (var movieInfo in selectedMovies)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
             moviesProcessed++;
-            var result = await _movieProcessingService.ProcessMovieAsync(movie, cancellationToken).ConfigureAwait(false);
+            var wasUncheckedBeforeSelection = !scanState.Items.TryGetValue(movieInfo.Movie.Id, out var existingScanState) || existingScanState.LastOscarScanUtc is null;
+            var result = await _movieProcessingService.ProcessMovieAsync(movieInfo.Movie, cancellationToken).ConfigureAwait(false);
             if (result.OmdbRequestAttempted)
             {
                 omdbRequestsMade++;
@@ -91,23 +131,38 @@ public sealed class OscarLibraryScanService : IOscarLibraryScanService
             if (result.WasUpdated)
             {
                 moviesUpdated++;
-                await _movieRepository.PersistAsync(movie, cancellationToken).ConfigureAwait(false);
-                continue;
+                await _movieRepository.PersistAsync(movieInfo.Movie, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (ShouldRecordCompletedScanAttempt(result))
+            {
+                await _scanStateService.RecordCompletedScanAttemptAsync(movieInfo.Movie.Id, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                if (wasUncheckedBeforeSelection)
+                {
+                    uncheckedSelectionsRecorded++;
+                }
             }
 
             Increment(reasonCounts, ToReasonKey(result.Outcome));
+            ClassifyBatchOutcome(result, ref moviesNoChange, ref moviesWithoutOscarData, ref moviesFailed);
         }
 
-        var moviesSkipped = movies.Count - moviesUpdated;
+        var uncheckedRemaining = Math.Max(0, uncheckedCount - uncheckedSelectionsRecorded);
+        var omdbRequestReason = GetOmdbRequestReason(omdbRequestsMade, selectedMovies.Count, moviesNoChange, moviesWithoutOscarData, moviesFailed);
         _logger.LogInformation(
-            "{Origin} Oscar library scan completed. TotalMoviesFound={TotalMoviesFound}, MoviesEligible={MoviesEligible}, MoviesProcessed={MoviesProcessed}, MoviesUpdated={MoviesUpdated}, MoviesSkipped={MoviesSkipped}, OmdbRequestsMade={OmdbRequestsMade}.",
+            "{Origin} Oscar scan batch outcome. SelectedBatchCount={SelectedBatchCount}, MoviesProcessed={MoviesProcessed}, OmdbRequestsMade={OmdbRequestsMade}, OmdbRequestReason={OmdbRequestReason}, MoviesUpdated={MoviesUpdated}, MoviesNoChange={MoviesNoChange}, MoviesWithoutOscarData={MoviesWithoutOscarData}, MoviesFailed={MoviesFailed}, UncheckedRemaining={UncheckedRemaining}.",
             request.Origin,
-            movies.Count,
-            moviesEligible,
+            selectedMovies.Count,
             moviesProcessed,
+            omdbRequestsMade,
+            omdbRequestReason,
             moviesUpdated,
-            moviesSkipped,
-            omdbRequestsMade);
+            moviesNoChange,
+            moviesWithoutOscarData,
+            moviesFailed,
+            uncheckedRemaining);
+
+        var moviesSkipped = movies.Count - moviesUpdated;
 
         return new OscarLibraryScanResult
         {
@@ -137,15 +192,15 @@ public sealed class OscarLibraryScanService : IOscarLibraryScanService
         };
     }
 
-    private static void Increment(IDictionary<string, int> reasonCounts, string reason)
+    private static void Increment(IDictionary<string, int> reasonCounts, string reason, int amount = 1)
     {
         if (reasonCounts.TryGetValue(reason, out var count))
         {
-            reasonCounts[reason] = count + 1;
+            reasonCounts[reason] = count + amount;
             return;
         }
 
-        reasonCounts[reason] = 1;
+        reasonCounts[reason] = amount;
     }
 
     private static string ToReasonKey(OscarMovieProcessOutcome outcome)
@@ -161,6 +216,67 @@ public sealed class OscarLibraryScanService : IOscarLibraryScanService
             OscarMovieProcessOutcome.MissingApiKey => "missing_api_key",
             _ => "other"
         };
+    }
+
+    private static bool ShouldRecordCompletedScanAttempt(OscarMovieProcessResult result)
+    {
+        return result.Outcome is not OscarMovieProcessOutcome.OmdbRequestFailure;
+    }
+
+    private static void ClassifyBatchOutcome(
+        OscarMovieProcessResult result,
+        ref int moviesNoChange,
+        ref int moviesWithoutOscarData,
+        ref int moviesFailed)
+    {
+        switch (result.Outcome)
+        {
+            case OscarMovieProcessOutcome.CacheHit:
+            case OscarMovieProcessOutcome.AlreadyUpToDate:
+                moviesNoChange++;
+                break;
+            case OscarMovieProcessOutcome.NoOscarRelatedResult:
+                moviesWithoutOscarData++;
+                break;
+            case OscarMovieProcessOutcome.OmdbRequestFailure:
+                moviesFailed++;
+                break;
+        }
+    }
+
+    private static string GetOmdbRequestReason(
+        int omdbRequestsMade,
+        int selectedBatchCount,
+        int moviesNoChange,
+        int moviesWithoutOscarData,
+        int moviesFailed)
+    {
+        if (omdbRequestsMade > 0)
+        {
+            return "performed";
+        }
+
+        if (selectedBatchCount == 0)
+        {
+            return "no_selected_candidates";
+        }
+
+        if (moviesNoChange == selectedBatchCount)
+        {
+            return "selected_items_fresh_or_cached";
+        }
+
+        if (moviesWithoutOscarData == selectedBatchCount)
+        {
+            return "no_omdb_lookup_needed";
+        }
+
+        if (moviesFailed == selectedBatchCount)
+        {
+            return "selected_items_failed_before_lookup";
+        }
+
+        return "no_omdb_lookup_needed";
     }
 
     private static string BuildSuccessMessage(

@@ -28,6 +28,8 @@ public sealed class OscarPluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<OscarMetadataEnricher>();
         serviceCollection.AddSingleton<IOscarMovieProcessingService, OscarMovieProcessingService>();
         serviceCollection.AddSingleton<ILibraryMovieRepository, JellyfinLibraryMovieRepository>();
+        serviceCollection.AddSingleton<IOscarScanStateService, OscarScanStateService>();
+        serviceCollection.AddSingleton<IManualOscarScanDispatcher, ManualOscarScanDispatcher>();
         serviceCollection.AddSingleton<IOscarCollectionRepository, JellyfinOscarCollectionRepository>();
         serviceCollection.AddSingleton<IOscarCollectionSyncService, OscarCollectionSyncService>();
         serviceCollection.AddSingleton<IOscarLibraryScanService, OscarLibraryScanService>();

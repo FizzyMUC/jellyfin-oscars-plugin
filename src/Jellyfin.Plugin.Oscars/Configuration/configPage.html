@@ -80,6 +80,12 @@
                             <div class="fieldDescription">Adds the plugin's default poster artwork to Oscar collections only when they do not already have a primary image.</div>
                         </div>
 
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Exclude libraries from Oscar collections</label>
+                            <div id="ExcludedOscarCollectionLibraries" class="verticalSection"></div>
+                            <div class="fieldDescription">Selected libraries still receive Oscar enrichment and tags, but their movies are skipped when building Oscar Winners and Oscar Nominees collections.</div>
+                        </div>
+
                         <div class="sectionTitleContainer">
                             <button id="TestOmdbConnectionButton" is="emby-button" type="button" class="raised emby-button button-alt">
                                 <span>Test OMDb Connection</span>
@@ -131,6 +137,8 @@
                 var resultNode = document.querySelector('#OmdbConnectionResult');
                 var scanResultNode = document.querySelector('#LibraryScanResult');
                 var collectionResultNode = document.querySelector('#CollectionSyncResult');
+                var excludedLibrariesNode = document.querySelector('#ExcludedOscarCollectionLibraries');
+                var availableLibraries = [];
 
                 configPage.setAttribute('data-pluginid', pluginUniqueId);
 
@@ -153,7 +161,8 @@
                         createOscarWinnersCollection: !!(config && config.CreateOscarWinnersCollection),
                         createOscarNomineesCollection: !!(config && config.CreateOscarNomineesCollection),
                         includeWinnersInNomineesCollection: !!(config && config.IncludeWinnersInNomineesCollection),
-                        setDefaultArtworkForOscarCollections: !!(config && config.SetDefaultArtworkForOscarCollections)
+                        setDefaultArtworkForOscarCollections: !!(config && config.SetDefaultArtworkForOscarCollections),
+                        excludedCollectionLibraryCount: config && config.ExcludedOscarCollectionLibraryIds ? config.ExcludedOscarCollectionLibraryIds.length : 0
                     };
                 }
 
@@ -182,6 +191,46 @@
                     window.setTimeout(function () {
                         logConfigurationEvent(eventName, config);
                     }, 0);
+                }
+
+                function getSelectedExcludedLibraryIds() {
+                    return Array.prototype.slice.call(excludedLibrariesNode.querySelectorAll('input[type="checkbox"]:checked'))
+                        .map(function (checkbox) {
+                            return checkbox.value;
+                        })
+                        .sort();
+                }
+
+                function renderLibraryOptions(libraries, selectedLibraryIds) {
+                    availableLibraries = Array.isArray(libraries) ? libraries.slice() : [];
+                    excludedLibrariesNode.innerHTML = '';
+
+                    if (!availableLibraries.length) {
+                        excludedLibrariesNode.textContent = 'No movie libraries found.';
+                        return;
+                    }
+
+                    availableLibraries.forEach(function (library) {
+                        var wrapper = document.createElement('div');
+                        wrapper.className = 'checkboxContainer checkboxContainer-withDescription';
+
+                        var label = document.createElement('label');
+                        label.className = 'emby-checkbox-label';
+
+                        var input = document.createElement('input');
+                        input.type = 'checkbox';
+                        input.setAttribute('is', 'emby-checkbox');
+                        input.value = library.id || library.Id || '';
+                        input.checked = selectedLibraryIds.indexOf(input.value) !== -1;
+
+                        var span = document.createElement('span');
+                        span.textContent = library.name || library.Name || input.value;
+
+                        label.appendChild(input);
+                        label.appendChild(span);
+                        wrapper.appendChild(label);
+                        excludedLibrariesNode.appendChild(wrapper);
+                    });
                 }
 
                 function parseAjaxJson(result) {
@@ -272,6 +321,7 @@
                     document.querySelector('#CreateOscarNomineesCollection').checked = !!config.CreateOscarNomineesCollection;
                     document.querySelector('#IncludeWinnersInNomineesCollection').checked = !!config.IncludeWinnersInNomineesCollection;
                     document.querySelector('#SetDefaultArtworkForOscarCollections').checked = config.SetDefaultArtworkForOscarCollections !== false;
+                    renderLibraryOptions(availableLibraries, (config.ExcludedOscarCollectionLibraryIds || []).slice().sort());
                 }
 
                 function updateConfigurationObject(config) {
@@ -284,6 +334,7 @@
                     config.CreateOscarNomineesCollection = document.querySelector('#CreateOscarNomineesCollection').checked;
                     config.IncludeWinnersInNomineesCollection = document.querySelector('#IncludeWinnersInNomineesCollection').checked;
                     config.SetDefaultArtworkForOscarCollections = document.querySelector('#SetDefaultArtworkForOscarCollections').checked;
+                    config.ExcludedOscarCollectionLibraryIds = getSelectedExcludedLibraryIds();
 
                     return config;
                 }
@@ -306,6 +357,19 @@
                     collectionResultNode.style.fontWeight = message ? '600' : '400';
                 }
 
+                function arraysMatch(expected, actual) {
+                    var expectedValues = (expected || []).slice().sort();
+                    var actualValues = (actual || []).slice().sort();
+
+                    if (expectedValues.length !== actualValues.length) {
+                        return false;
+                    }
+
+                    return expectedValues.every(function (value, index) {
+                        return value === actualValues[index];
+                    });
+                }
+
                 function configsMatch(expected, actual) {
                     return (expected.OmdbApiKey || '') === (actual.OmdbApiKey || '') &&
                         !!expected.EnableOscarEnrichment === !!actual.EnableOscarEnrichment &&
@@ -315,13 +379,32 @@
                         !!expected.CreateOscarWinnersCollection === !!actual.CreateOscarWinnersCollection &&
                         !!expected.CreateOscarNomineesCollection === !!actual.CreateOscarNomineesCollection &&
                         !!expected.IncludeWinnersInNomineesCollection === !!actual.IncludeWinnersInNomineesCollection &&
-                        !!expected.SetDefaultArtworkForOscarCollections === !!actual.SetDefaultArtworkForOscarCollections;
+                        !!expected.SetDefaultArtworkForOscarCollections === !!actual.SetDefaultArtworkForOscarCollections &&
+                        arraysMatch(expected.ExcludedOscarCollectionLibraryIds, actual.ExcludedOscarCollectionLibraryIds);
+                }
+
+                function loadMovieLibraries() {
+                    return ajax({
+                        type: 'GET',
+                        url: getUrl('Plugins/Jellyfin.Oscars/Libraries'),
+                        dataType: 'json'
+                    }).then(function (response) {
+                        var payload = parseAjaxJson(response);
+                        return Array.isArray(payload) ? payload : [];
+                    }).catch(function () {
+                        return [];
+                    });
                 }
 
                 function loadConfiguration() {
                     Dashboard.showLoadingMsg();
 
-                    return ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
+                    return Promise.all([
+                        ApiClient.getPluginConfiguration(pluginUniqueId),
+                        loadMovieLibraries()
+                    ]).then(function (results) {
+                        var config = results[0];
+                        availableLibraries = results[1];
                         applyFormValues(config);
                         renderResult('Configuration loaded.', true);
                         renderScanResult('', true);

@@ -29,7 +29,7 @@ public sealed class PluginConfigurationService : IPluginConfigurationService
         plugin.SaveConfiguration(configuration);
 
         _logger.LogInformation(
-            "Saved plugin configuration. EnrichmentEnabled={EnableOscarEnrichment}, HasApiKey={HasApiKey}, CacheDurationHours={CacheDurationHours}, ScheduledRefreshEnabled={EnableScheduledRefresh}, RefreshBatchSize={RefreshBatchSize}, WinnersCollectionEnabled={CreateOscarWinnersCollection}, NomineesCollectionEnabled={CreateOscarNomineesCollection}, IncludeWinnersInNominees={IncludeWinnersInNomineesCollection}, DefaultCollectionArtworkEnabled={SetDefaultArtworkForOscarCollections}.",
+            "Saved plugin configuration. EnrichmentEnabled={EnableOscarEnrichment}, HasApiKey={HasApiKey}, CacheDurationHours={CacheDurationHours}, ScheduledRefreshEnabled={EnableScheduledRefresh}, RefreshBatchSize={RefreshBatchSize}, WinnersCollectionEnabled={CreateOscarWinnersCollection}, NomineesCollectionEnabled={CreateOscarNomineesCollection}, IncludeWinnersInNominees={IncludeWinnersInNomineesCollection}, DefaultCollectionArtworkEnabled={SetDefaultArtworkForOscarCollections}, ExcludedCollectionLibraryCount={ExcludedCollectionLibraryCount}.",
             plugin.Configuration.EnableOscarEnrichment,
             !string.IsNullOrWhiteSpace(plugin.Configuration.OmdbApiKey),
             plugin.Configuration.CacheDurationHours,
@@ -38,7 +38,8 @@ public sealed class PluginConfigurationService : IPluginConfigurationService
             plugin.Configuration.CreateOscarWinnersCollection,
             plugin.Configuration.CreateOscarNomineesCollection,
             plugin.Configuration.IncludeWinnersInNomineesCollection,
-            plugin.Configuration.SetDefaultArtworkForOscarCollections);
+            plugin.Configuration.SetDefaultArtworkForOscarCollections,
+            plugin.Configuration.ExcludedOscarCollectionLibraryIds.Length);
 
         return plugin.Configuration;
     }
@@ -48,5 +49,10 @@ public sealed class PluginConfigurationService : IPluginConfigurationService
         configuration.OmdbApiKey = configuration.OmdbApiKey.Trim();
         configuration.CacheDurationHours = Math.Max(1, configuration.CacheDurationHours);
         configuration.RefreshBatchSize = Math.Max(1, configuration.RefreshBatchSize);
+        configuration.ExcludedOscarCollectionLibraryIds = configuration.ExcludedOscarCollectionLibraryIds
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 }

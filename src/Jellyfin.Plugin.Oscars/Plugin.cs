@@ -1,4 +1,5 @@
 using Jellyfin.Plugin.Oscars.Configuration;
+using Jellyfin.Plugin.Oscars.Infrastructure;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
@@ -16,6 +17,8 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
         : base(applicationPaths, xmlSerializer)
     {
+        JavaScriptInjectorRegistration.TryRegisterOscarBadgeScript(AssemblyFilePath, PluginId, Name, Version);
+        JellyfinWebScriptBootstrapper.EnsureOscarDetailBadgeScriptIsLoaded(applicationPaths.WebPath);
         Instance = this;
     }
 

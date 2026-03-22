@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Jellyfin.Plugin.Oscars.Configuration;
@@ -42,30 +43,68 @@ public sealed class OmdbClient : IOmdbClient
         try
         {
             using var response = await _httpClient.GetAsync(requestUri, cancellationToken).ConfigureAwait(false);
+            var payload = await ReadOmdbPayloadAsync(response, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
+                LogLookupFailure(normalizedImdbId, payload, response.StatusCode, "http_error");
                 return null;
             }
 
-            var payload = await response.Content.ReadFromJsonAsync<OmdbMovieResponse>(cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
             if (payload is null || !payload.IsSuccess)
             {
+                LogLookupFailure(normalizedImdbId, payload, response.StatusCode, "omdb_failure");
                 return null;
             }
 
-            return MapPayload(payload, normalizedImdbId);
+            var movie = MapPayload(payload, normalizedImdbId);
+            if (movie is null)
+            {
+                _logger.LogWarning(
+                    "OMDb lookup issue. imdb_id={ImdbId}, reason={Reason}, http_status={HttpStatusCode}.",
+                    normalizedImdbId,
+                    "imdb_id_mismatch",
+                    (int)response.StatusCode);
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(movie.AwardsText))
+            {
+                _logger.LogInformation(
+                    "OMDb lookup issue. imdb_id={ImdbId}, reason={Reason}, http_status={HttpStatusCode}.",
+                    normalizedImdbId,
+                    "missing_awards_data",
+                    (int)response.StatusCode);
+            }
+
+            return movie;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            _logger.LogWarning(
+                ex,
+                "OMDb lookup issue. imdb_id={ImdbId}, reason={Reason}, http_status={HttpStatusCode}.",
+                normalizedImdbId,
+                "network_exception",
+                0);
             return null;
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning(
+                "OMDb lookup issue. imdb_id={ImdbId}, reason={Reason}, http_status={HttpStatusCode}.",
+                normalizedImdbId,
+                "request_timeout",
+                0);
             return null;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            _logger.LogWarning(
+                ex,
+                "OMDb lookup issue. imdb_id={ImdbId}, reason={Reason}, http_status={HttpStatusCode}.",
+                normalizedImdbId,
+                "invalid_response",
+                0);
             return null;
         }
     }
@@ -203,5 +242,35 @@ public sealed class OmdbClient : IOmdbClient
 
         result = null!;
         return false;
+    }
+
+    private void LogLookupFailure(string imdbId, OmdbMovieResponse? payload, HttpStatusCode statusCode, string fallbackReason)
+    {
+        _logger.LogWarning(
+            "OMDb lookup issue. imdb_id={ImdbId}, reason={Reason}, http_status={HttpStatusCode}.",
+            imdbId,
+            ClassifyFailureReason(payload, statusCode, fallbackReason),
+            (int)statusCode);
+    }
+
+    private static string ClassifyFailureReason(OmdbMovieResponse? payload, HttpStatusCode statusCode, string fallbackReason)
+    {
+        var error = NormalizeOmdbValue(payload?.Error);
+        if (statusCode == HttpStatusCode.TooManyRequests || (error?.Contains("limit", StringComparison.OrdinalIgnoreCase) ?? false))
+        {
+            return "rate_limit";
+        }
+
+        if (statusCode == HttpStatusCode.Unauthorized || string.Equals(error, "Invalid API key!", StringComparison.OrdinalIgnoreCase))
+        {
+            return "invalid_api_key";
+        }
+
+        if (string.Equals(error, "Movie not found!", StringComparison.OrdinalIgnoreCase))
+        {
+            return "not_found";
+        }
+
+        return fallbackReason;
     }
 }
