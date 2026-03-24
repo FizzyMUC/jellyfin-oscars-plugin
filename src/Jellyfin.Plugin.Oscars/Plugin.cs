@@ -1,5 +1,6 @@
 using Jellyfin.Plugin.Oscars.Configuration;
 using Jellyfin.Plugin.Oscars.Infrastructure;
+using Jellyfin.Plugin.Oscars.Models;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
@@ -17,12 +18,18 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
         : base(applicationPaths, xmlSerializer)
     {
-        JavaScriptInjectorRegistration.TryRegisterOscarBadgeScript(AssemblyFilePath, PluginId, Name, Version);
-        JellyfinWebScriptBootstrapper.EnsureOscarDetailBadgeScriptIsLoaded(applicationPaths.WebPath);
+        FrontendBadgeIntegrationStatus = JavaScriptInjectorRegistration.TryRegisterOscarBadgeScript(AssemblyFilePath, PluginId, Name, Version);
         Instance = this;
     }
 
     public static Plugin? Instance { get; private set; }
+
+    public static FrontendBadgeIntegrationStatus FrontendBadgeIntegrationStatus { get; private set; } =
+        new()
+        {
+            State = FrontendBadgeIntegrationState.RegistrationFailed,
+            Message = "Inactive: Frontend badge integration has not completed initialization yet."
+        };
 
     public override string Name => "Jellyfin Oscars";
 

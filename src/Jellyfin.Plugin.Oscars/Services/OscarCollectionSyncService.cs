@@ -3,6 +3,7 @@ using Jellyfin.Plugin.Oscars.Models;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
 
 namespace Jellyfin.Plugin.Oscars.Services;
 
@@ -321,20 +322,36 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
             return;
         }
 
-        if (collection.HasPrimaryImage)
-        {
-            _logger.LogDebug("{Origin} Oscar collection {CollectionName}: skipping artwork (already present).", origin, collection.Name);
-            return;
-        }
-
         var artworkFiles = GetArtworkFiles(collection.Name);
         if (artworkFiles is null)
         {
             return;
         }
 
-        await ApplyDefaultArtworkAsync(collection, artworkFiles.Value.PosterFileName, ImageType.Primary, origin, cancellationToken).ConfigureAwait(false);
-        await ApplyDefaultArtworkAsync(collection, artworkFiles.Value.LandscapeFileName, ImageType.Thumb, origin, cancellationToken).ConfigureAwait(false);
+        var shouldReplaceLegacyLandscapePrimary = await ShouldReplaceLegacyLandscapePrimaryAsync(collection, artworkFiles.Value.LandscapeFileName, cancellationToken).ConfigureAwait(false);
+        if (!collection.HasPrimaryImage || shouldReplaceLegacyLandscapePrimary)
+        {
+            await ApplyDefaultArtworkAsync(
+                collection,
+                artworkFiles.Value.PosterFileName,
+                ImageType.Primary,
+                origin,
+                cancellationToken,
+                overwriteExisting: shouldReplaceLegacyLandscapePrimary).ConfigureAwait(false);
+        }
+        else
+        {
+            _logger.LogDebug("{Origin} Oscar collection {CollectionName}: keeping existing primary artwork.", origin, collection.Name);
+        }
+
+        if (!collection.HasThumbImage)
+        {
+            await ApplyDefaultArtworkAsync(collection, artworkFiles.Value.LandscapeFileName, ImageType.Thumb, origin, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            _logger.LogDebug("{Origin} Oscar collection {CollectionName}: keeping existing thumb artwork.", origin, collection.Name);
+        }
     }
 
     private async Task ApplyDefaultArtworkAsync(
@@ -342,7 +359,8 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
         string resourceFileName,
         ImageType imageType,
         string origin,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool overwriteExisting = false)
     {
         _logger.LogInformation(
             "{Origin} Applying default {ImageType} artwork to {CollectionName} collection from {ResourceFileName}.",
@@ -352,7 +370,7 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
             resourceFileName);
 
         var outcome = await _collectionRepository
-            .SetImageFromPluginResourceAsync(collection.Id, resourceFileName, imageType, cancellationToken)
+            .SetImageFromPluginResourceAsync(collection.Id, resourceFileName, imageType, overwriteExisting, cancellationToken)
             .ConfigureAwait(false);
 
         if (outcome.Applied)
@@ -360,6 +378,12 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
             if (imageType == ImageType.Primary)
             {
                 collection.HasPrimaryImage = true;
+                collection.PrimaryImagePath = null;
+            }
+
+            if (imageType == ImageType.Thumb)
+            {
+                collection.HasThumbImage = true;
             }
 
             return;
@@ -381,6 +405,50 @@ public sealed class OscarCollectionSyncService : IOscarCollectionSyncService
         {
             _logger.LogWarning("{Origin} Oscar collection {CollectionName}: collection not found when applying {ImageType} artwork.", origin, collection.Name, imageType);
         }
+    }
+
+    private async Task<bool> ShouldReplaceLegacyLandscapePrimaryAsync(
+        OscarCollectionInfo collection,
+        string legacyLandscapeFileName,
+        CancellationToken cancellationToken)
+    {
+        if (!collection.HasPrimaryImage || string.IsNullOrWhiteSpace(collection.PrimaryImagePath) || !File.Exists(collection.PrimaryImagePath))
+        {
+            return false;
+        }
+
+        var pluginDirectory = Path.GetDirectoryName(typeof(Plugin).Assembly.Location);
+        if (string.IsNullOrWhiteSpace(pluginDirectory))
+        {
+            return false;
+        }
+
+        var legacyLandscapePath = Path.Combine(pluginDirectory, "Resources", legacyLandscapeFileName);
+        if (!File.Exists(legacyLandscapePath))
+        {
+            return false;
+        }
+
+        var currentPrimaryHash = await ComputeSha256Async(collection.PrimaryImagePath, cancellationToken).ConfigureAwait(false);
+        var legacyLandscapeHash = await ComputeSha256Async(legacyLandscapePath, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(currentPrimaryHash, legacyLandscapeHash, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _logger.LogInformation(
+            "Oscar collection {CollectionName}: replacing legacy landscape primary artwork with portrait artwork.",
+            collection.Name);
+
+        return true;
+    }
+
+    private static async Task<string> ComputeSha256Async(string filePath, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+        using var sha256 = SHA256.Create();
+        var hash = await sha256.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+        return Convert.ToHexString(hash);
     }
 
     private static (string PosterFileName, string LandscapeFileName)? GetArtworkFiles(string collectionName)

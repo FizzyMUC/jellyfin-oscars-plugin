@@ -86,6 +86,12 @@
                             <div class="fieldDescription">Selected libraries still receive Oscar enrichment and tags, but their movies are skipped when building Oscar Winners and Oscar Nominees collections.</div>
                         </div>
 
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused">Jellyfin Web badge integration</label>
+                            <div id="FrontendBadgeIntegrationStatus" class="fieldDescription" aria-live="polite"></div>
+                            <div class="fieldDescription">Oscar detail-page badges in Jellyfin Web require the JavaScript Injector plugin. This plugin no longer modifies Jellyfin Web files directly.</div>
+                        </div>
+
                         <div class="sectionTitleContainer">
                             <button id="TestOmdbConnectionButton" is="emby-button" type="button" class="raised emby-button button-alt">
                                 <span>Test OMDb Connection</span>
@@ -137,6 +143,7 @@
                 var resultNode = document.querySelector('#OmdbConnectionResult');
                 var scanResultNode = document.querySelector('#LibraryScanResult');
                 var collectionResultNode = document.querySelector('#CollectionSyncResult');
+                var frontendBadgeStatusNode = document.querySelector('#FrontendBadgeIntegrationStatus');
                 var excludedLibrariesNode = document.querySelector('#ExcludedOscarCollectionLibraries');
                 var availableLibraries = [];
 
@@ -357,6 +364,21 @@
                     collectionResultNode.style.fontWeight = message ? '600' : '400';
                 }
 
+                function normalizeFrontendBadgeStatus(payload) {
+                    return {
+                        isActive: typeof payload.isActive !== 'undefined' ? !!payload.isActive : !!payload.IsActive,
+                        state: payload.state || payload.State || '',
+                        message: payload.message || payload.Message || ''
+                    };
+                }
+
+                function renderFrontendBadgeStatus(payload) {
+                    var status = normalizeFrontendBadgeStatus(payload || {});
+                    frontendBadgeStatusNode.textContent = status.message || 'Frontend badge integration status unavailable.';
+                    frontendBadgeStatusNode.style.color = status.isActive ? 'var(--theme-primary-color)' : 'var(--theme-warning-color, var(--theme-error-color))';
+                    frontendBadgeStatusNode.style.fontWeight = status.message ? '600' : '400';
+                }
+
                 function arraysMatch(expected, actual) {
                     var expectedValues = (expected || []).slice().sort();
                     var actualValues = (actual || []).slice().sort();
@@ -396,15 +418,33 @@
                     });
                 }
 
+                function loadFrontendBadgeStatus() {
+                    return ajax({
+                        type: 'GET',
+                        url: getUrl('Plugins/Jellyfin.Oscars/FrontendBadgeIntegrationStatus'),
+                        dataType: 'json'
+                    }).then(function (response) {
+                        return normalizeFrontendBadgeStatus(parseAjaxJson(response));
+                    }).catch(function () {
+                        return {
+                            isActive: false,
+                            state: 'Unavailable',
+                            message: 'Inactive: Unable to determine JavaScript Injector status. Check server logs for startup details.'
+                        };
+                    });
+                }
+
                 function loadConfiguration() {
                     Dashboard.showLoadingMsg();
 
                     return Promise.all([
                         ApiClient.getPluginConfiguration(pluginUniqueId),
-                        loadMovieLibraries()
+                        loadMovieLibraries(),
+                        loadFrontendBadgeStatus()
                     ]).then(function (results) {
                         var config = results[0];
                         availableLibraries = results[1];
+                        renderFrontendBadgeStatus(results[2]);
                         applyFormValues(config);
                         renderResult('Configuration loaded.', true);
                         renderScanResult('', true);

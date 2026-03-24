@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Jellyfin.Plugin.Oscars.Models;
 using Jellyfin.Plugin.Oscars.Services;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Model.Entities;
@@ -127,6 +128,17 @@ public sealed class OscarsConfigurationController : ControllerBase
         return Ok(libraries);
     }
 
+    [HttpGet("FrontendBadgeIntegrationStatus")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<FrontendBadgeIntegrationStatusDto> GetFrontendBadgeIntegrationStatus()
+    {
+        var status = Plugin.FrontendBadgeIntegrationStatus;
+        return Ok(new FrontendBadgeIntegrationStatusDto(
+            status.IsActive,
+            status.State.ToString(),
+            status.Message));
+    }
+
     [HttpPost("ConfigurationLog")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult LogConfigurationEvent([FromBody][Required] ConfigurationLogRequest request)
@@ -164,6 +176,8 @@ public sealed class OscarsConfigurationController : ControllerBase
     public sealed record MovieLibraryDto(Guid Id, string Name);
 
     public sealed record OmdbConnectionTestResultDto(bool IsSuccess, string Message, string? ErrorCode);
+
+    public sealed record FrontendBadgeIntegrationStatusDto(bool IsActive, string State, string Message);
 
     public sealed record LibraryScanResultDto(
         bool IsSuccess,

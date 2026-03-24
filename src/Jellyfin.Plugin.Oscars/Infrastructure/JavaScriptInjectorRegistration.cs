@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Jellyfin.Plugin.Oscars.Models;
 
 namespace Jellyfin.Plugin.Oscars.Infrastructure;
 
@@ -14,7 +15,7 @@ public static class JavaScriptInjectorRegistration
     private const string UnregisterScriptMethodName = "UnregisterScript";
     private const string OscarBadgeScriptRelativePath = "wwwroot/scripts/oscarDetailBadge.js";
 
-    public static void TryRegisterOscarBadgeScript(string assemblyFilePath, Guid pluginId, string pluginName, Version pluginVersion)
+    public static FrontendBadgeIntegrationStatus TryRegisterOscarBadgeScript(string assemblyFilePath, Guid pluginId, string pluginName, Version pluginVersion)
     {
         try
         {
@@ -24,37 +25,38 @@ public static class JavaScriptInjectorRegistration
 
             if (injectorAssembly is null)
             {
-                Log("JavaScript Injector plugin not detected. Keeping manual injection fallback.");
-                return;
+                const string message = "Inactive: JavaScript Injector plugin not installed. Install it to enable Oscars badges in Jellyfin Web.";
+                LogWarning(message);
+                return new FrontendBadgeIntegrationStatus
+                {
+                    State = FrontendBadgeIntegrationState.MissingDependency,
+                    Message = message
+                };
             }
 
-            Log("JavaScript Injector plugin detected. Attempting Oscar badge script registration.");
+            LogInfo("JavaScript Injector plugin detected. Attempting Oscar badge script registration.");
             var pluginInterfaceType = injectorAssembly.GetType(PluginInterfaceTypeName);
             if (pluginInterfaceType is null)
             {
-                Log("JavaScript Injector registration failed because PluginInterface was not found.");
-                return;
+                return CreateFailureStatus("Inactive: JavaScript Injector plugin was detected, but its PluginInterface type was not found.");
             }
 
             var registerScriptMethod = pluginInterfaceType.GetMethod(RegisterScriptMethodName, BindingFlags.Public | BindingFlags.Static);
             if (registerScriptMethod is null)
             {
-                Log("JavaScript Injector registration failed because RegisterScript was not found.");
-                return;
+                return CreateFailureStatus("Inactive: JavaScript Injector plugin was detected, but its RegisterScript API was not found.");
             }
 
             var scriptDirectory = Path.GetDirectoryName(assemblyFilePath);
             if (string.IsNullOrWhiteSpace(scriptDirectory))
             {
-                Log("JavaScript Injector registration failed because the plugin directory could not be determined.");
-                return;
+                return CreateFailureStatus("Inactive: Oscar badge registration failed because the plugin directory could not be determined.");
             }
 
             var scriptPath = Path.Combine(scriptDirectory, OscarBadgeScriptRelativePath);
             if (!File.Exists(scriptPath))
             {
-                Log($"JavaScript Injector registration failed because the Oscar badge script was not found at {scriptPath}.");
-                return;
+                return CreateFailureStatus($"Inactive: Oscar badge registration failed because the badge script was not found at {scriptPath}.");
             }
 
             var scriptId = $"{pluginId}-oscar-detail-badge";
@@ -71,28 +73,47 @@ public static class JavaScriptInjectorRegistration
                 pluginVersion);
             if (registrationPayload is null)
             {
-                Log("JavaScript Injector registration failed because a JObject payload could not be created.");
-                return;
+                return CreateFailureStatus("Inactive: Oscar badge registration failed because the JavaScript Injector payload could not be created.");
             }
 
             var registrationResult = registerScriptMethod.Invoke(null, [registrationPayload]);
             if (registrationResult is bool success && success)
             {
-                Log("Successfully registered Oscar badge script with JavaScript Injector.");
-                return;
+                const string message = "Active: JavaScript Injector detected and Oscars badge script registered.";
+                LogInfo(message);
+                return new FrontendBadgeIntegrationStatus
+                {
+                    State = FrontendBadgeIntegrationState.Active,
+                    Message = message
+                };
             }
 
-            Log("JavaScript Injector registration failed. Keeping manual injection fallback.");
+            return CreateFailureStatus("Inactive: JavaScript Injector was detected, but Oscar badge script registration did not succeed.");
         }
         catch (Exception ex)
         {
-            Log($"JavaScript Injector registration failed with an exception: {ex.Message}");
+            return CreateFailureStatus($"Inactive: Oscar badge registration failed with an exception: {ex.Message}");
         }
     }
 
-    private static void Log(string message)
+    private static FrontendBadgeIntegrationStatus CreateFailureStatus(string message)
     {
-        Console.WriteLine($"[Jellyfin Oscars] {message}");
+        LogWarning(message);
+        return new FrontendBadgeIntegrationStatus
+        {
+            State = FrontendBadgeIntegrationState.RegistrationFailed,
+            Message = message
+        };
+    }
+
+    private static void LogInfo(string message)
+    {
+        Console.WriteLine($"[Jellyfin Oscars] INFO: {message}");
+    }
+
+    private static void LogWarning(string message)
+    {
+        Console.WriteLine($"[Jellyfin Oscars] WARN: {message}");
     }
 
     private static object? CreateRegistrationPayload(Assembly injectorAssembly, string scriptId, string scriptContents, Guid pluginId, string pluginName, Version pluginVersion)

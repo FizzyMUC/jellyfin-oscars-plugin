@@ -13,5 +13,9 @@ public sealed class OscarCollectionInfo
 
     public bool HasPrimaryImage { get; set; }
 
+    public bool HasThumbImage { get; set; }
+
+    public string? PrimaryImagePath { get; set; }
+
     public IReadOnlySet<Guid> ItemIds { get; set; } = new HashSet<Guid>();
 }

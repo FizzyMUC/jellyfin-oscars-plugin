@@ -16,7 +16,7 @@ public interface IOscarCollectionRepository
 
     Task RemoveItemsAsync(Guid collectionId, IEnumerable<Guid> itemIds, CancellationToken cancellationToken = default);
 
-    Task<OscarCollectionArtworkApplyResult> SetImageFromPluginResourceAsync(Guid collectionId, string resourceFileName, ImageType imageType, CancellationToken cancellationToken = default);
+    Task<OscarCollectionArtworkApplyResult> SetImageFromPluginResourceAsync(Guid collectionId, string resourceFileName, ImageType imageType, bool overwriteExisting = false, CancellationToken cancellationToken = default);
 
     Task<bool> DeleteCollectionIfExistsAsync(string collectionName, CancellationToken cancellationToken = default);
 }

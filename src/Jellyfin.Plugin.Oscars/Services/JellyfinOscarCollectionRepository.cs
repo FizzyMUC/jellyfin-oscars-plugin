@@ -83,7 +83,7 @@ public sealed class JellyfinOscarCollectionRepository : IOscarCollectionReposito
         return Task.FromResult(true);
     }
 
-    public async Task<OscarCollectionArtworkApplyResult> SetImageFromPluginResourceAsync(Guid collectionId, string resourceFileName, ImageType imageType, CancellationToken cancellationToken = default)
+    public async Task<OscarCollectionArtworkApplyResult> SetImageFromPluginResourceAsync(Guid collectionId, string resourceFileName, ImageType imageType, bool overwriteExisting = false, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceFileName);
         cancellationToken.ThrowIfCancellationRequested();
@@ -96,7 +96,7 @@ public sealed class JellyfinOscarCollectionRepository : IOscarCollectionReposito
             };
         }
 
-        if (HasImage(collection, imageType))
+        if (!overwriteExisting && HasImage(collection, imageType))
         {
             return new OscarCollectionArtworkApplyResult
             {
@@ -158,6 +158,8 @@ public sealed class JellyfinOscarCollectionRepository : IOscarCollectionReposito
             Name = collection.Name,
             WasCreated = wasCreated,
             HasPrimaryImage = collection.HasImage(ImageType.Primary, 0) || !string.IsNullOrWhiteSpace(collection.PrimaryImagePath),
+            HasThumbImage = collection.HasImage(ImageType.Thumb, 0),
+            PrimaryImagePath = collection.PrimaryImagePath,
             ItemIds = itemIds
         };
     }
