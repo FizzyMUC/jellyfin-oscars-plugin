@@ -16,8 +16,8 @@ if ! command -v dotnet >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v md5 >/dev/null 2>&1 && ! command -v md5sum >/dev/null 2>&1; then
-  echo "md5 or md5sum is required but neither was found in PATH" >&2
+if ! command -v shasum >/dev/null 2>&1; then
+  echo "shasum is required but was not found in PATH" >&2
   exit 1
 fi
 
@@ -45,7 +45,7 @@ fi
 
 zip_name="jellyfin-oscars-v${release_version}.zip"
 zip_path="$release_dir/$zip_name"
-checksum_path="$zip_path.md5"
+checksum_path="$zip_path.sha256"
 
 rm -rf "$publish_dir" "$release_dir"
 mkdir -p "$publish_dir" "$release_dir"
@@ -57,11 +57,7 @@ dotnet publish "$project_file" -c Release -o "$publish_dir"
   zip -r "$zip_path" . >/dev/null
 )
 
-if command -v md5 >/dev/null 2>&1; then
-  checksum_value="$(md5 -q "$zip_path")"
-else
-  checksum_value="$(md5sum "$zip_path" | awk '{print $1}')"
-fi
+checksum_value="$(shasum -a 256 "$zip_path" | awk '{print $1}')"
 
 printf '%s\n' "$checksum_value" > "$checksum_path"
 
@@ -69,4 +65,4 @@ echo "Public repo: $repo_root"
 echo "Private repo: $private_repo_root"
 echo "Publish directory: $publish_dir"
 echo "Release zip: $zip_path"
-echo "MD5: $checksum_path"
+echo "SHA256: $checksum_path"
