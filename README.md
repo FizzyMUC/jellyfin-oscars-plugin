@@ -38,6 +38,17 @@ Each movie detail screen gets a badge next to the ratings that indicates if it i
 
 ## Installation
 
+### Latest release
+
+Current public release: `v1.0.4`
+
+Release highlights:
+
+- Removed legacy direct Jellyfin Web `index.html` patching
+- Switched badge injection to `JavaScript Injector` only
+- Added visible badge integration status in plugin settings
+- Improved startup resilience when `JavaScript Injector` is missing
+
 ### Add Plugin Repository
 
 1. Open the Jellyfin dashboard.
@@ -58,7 +69,7 @@ Each movie detail screen gets a badge next to the ratings that indicates if it i
 
 1. Download the latest release:
 
-   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.3/jellyfin-oscars-v1.0.3.zip`
+   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.4/jellyfin-oscars-v1.0.4.zip`
 
 2. Extract the release contents into:
 
@@ -116,7 +127,7 @@ If `Create Oscar Winners collection` is disabled, the plugin deletes the `Oscar 
 
 ### JavaScript Injector
 
-If `JavaScript Injector` is installed, Jellyfin Oscars can register its badge script automatically. In most setups, no manual script entry is needed.
+Jellyfin Oscars now integrates badges through `JavaScript Injector`. If `JavaScript Injector` is installed, the plugin can register its badge script automatically. In most setups, no manual script entry is needed.
 
 If automatic registration does not work in your environment, you can still add the script manually.
 

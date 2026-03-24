@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/FizzyMUC/jellyfin-oscars-plugin/main/src/Jellyfin.Plugin.Oscars/Resources/logo.png",
     "versions": [
       {
-        "version": "1.0.3.0",
-        "changelog": "Add async manual scan, batch-based scanning with persistent progress, scan concurrency protection, improved structured logging and OMDb diagnostics, collection poster support, badge text fix (Oscar Nominee), and optional JavaScript Injector auto-registration.",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.3/jellyfin-oscars-v1.0.3.zip",
-        "checksum": "c2b1716885dfd308a7f7414bc745c08b",
-        "timestamp": "2026-03-22T18:07:13Z"
+        "version": "1.0.4.0",
+        "changelog": "Remove legacy direct Jellyfin Web/index.html patching, switch badge injection to JavaScript Injector only, add visible badge integration status in plugin settings, and improve startup resilience when JavaScript Injector is missing.",
+        "targetAbi": "10.11.6.0",
+        "sourceUrl": "https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.4/jellyfin-oscars-v1.0.4.zip",
+        "checksum": "052ff158c3e8952cd3875b77374a80cb673acad71af351099062f9c9c274975a",
+        "timestamp": "2026-03-24T10:00:52Z"
       }
     ]
   }
