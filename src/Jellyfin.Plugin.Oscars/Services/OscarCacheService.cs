@@ -11,10 +11,12 @@ public sealed class OscarCacheService : IOscarCacheService
 {
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly IPluginConfigurationService _configurationService;
+    private readonly TimeProvider _timeProvider;
 
-    public OscarCacheService(IPluginConfigurationService configurationService)
+    public OscarCacheService(IPluginConfigurationService configurationService, TimeProvider? timeProvider = null)
     {
         _configurationService = configurationService;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public Task<OscarAwardInfo?> GetAsync(string imdbId, CancellationToken cancellationToken = default)
@@ -26,7 +28,7 @@ public sealed class OscarCacheService : IOscarCacheService
             return Task.FromResult<OscarAwardInfo?>(null);
         }
 
-        if (entry.ExpiresAtUtc <= DateTimeOffset.UtcNow)
+        if (entry.ExpiresAtUtc <= _timeProvider.GetUtcNow())
         {
             _cache.TryRemove(imdbId, out _);
             return Task.FromResult<OscarAwardInfo?>(null);
@@ -43,7 +45,7 @@ public sealed class OscarCacheService : IOscarCacheService
         var configuration = _configurationService.GetCurrent();
         _cache[imdbId] = new CacheEntry(
             awardInfo,
-            DateTimeOffset.UtcNow.AddHours(Math.Max(1, configuration.CacheDurationHours)));
+            _timeProvider.GetUtcNow().AddHours(Math.Max(1, configuration.CacheDurationHours)));
         return Task.CompletedTask;
     }
 

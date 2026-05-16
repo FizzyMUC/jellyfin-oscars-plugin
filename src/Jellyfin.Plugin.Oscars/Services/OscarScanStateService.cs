@@ -65,8 +65,30 @@ public sealed class OscarScanStateService : IOscarScanStateService
         }
 
         await using var stream = File.OpenRead(_statePath);
-        var snapshot = await JsonSerializer.DeserializeAsync<OscarScanStateSnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
-        return snapshot ?? new OscarScanStateSnapshot();
+        if (stream.Length == 0)
+        {
+            _logger.LogWarning("Oscar scan state file at {StatePath} was empty. Resetting to a default snapshot.", _statePath);
+            var emptySnapshot = new OscarScanStateSnapshot();
+            await SaveSnapshotUnsafeAsync(emptySnapshot, cancellationToken).ConfigureAwait(false);
+            return emptySnapshot;
+        }
+
+        try
+        {
+            var snapshot = await JsonSerializer.DeserializeAsync<OscarScanStateSnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
+            if (snapshot is not null)
+            {
+                return snapshot;
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Oscar scan state file at {StatePath} contained invalid JSON. Resetting to a default snapshot.", _statePath);
+        }
+
+        var defaultSnapshot = new OscarScanStateSnapshot();
+        await SaveSnapshotUnsafeAsync(defaultSnapshot, cancellationToken).ConfigureAwait(false);
+        return defaultSnapshot;
     }
 
     private async Task SaveSnapshotUnsafeAsync(OscarScanStateSnapshot snapshot, CancellationToken cancellationToken)
@@ -77,9 +99,11 @@ public sealed class OscarScanStateService : IOscarScanStateService
             Directory.CreateDirectory(directoryPath);
         }
 
-        await using var stream = File.Create(_statePath);
+        var tempPath = _statePath + ".tmp";
+        await using var stream = File.Create(tempPath);
         await JsonSerializer.SerializeAsync(stream, snapshot, JsonOptions, cancellationToken).ConfigureAwait(false);
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        File.Move(tempPath, _statePath, overwrite: true);
         _logger.LogDebug("Persisted Oscar scan state for {ItemCount} items.", snapshot.Items.Count);
     }
 }
