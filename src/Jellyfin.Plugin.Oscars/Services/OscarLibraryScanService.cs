@@ -136,8 +136,7 @@ public sealed class OscarLibraryScanService : IOscarLibraryScanService
 
             if (ShouldRecordCompletedScanAttempt(result))
             {
-                await _scanStateService.RecordCompletedScanAttemptAsync(movieInfo.Movie.Id, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
-                if (wasUncheckedBeforeSelection)
+                if (await TryRecordCompletedScanAttemptAsync(movieInfo, cancellationToken).ConfigureAwait(false) && wasUncheckedBeforeSelection)
                 {
                     uncheckedSelectionsRecorded++;
                 }
@@ -221,6 +220,24 @@ public sealed class OscarLibraryScanService : IOscarLibraryScanService
     private static bool ShouldRecordCompletedScanAttempt(OscarMovieProcessResult result)
     {
         return result.Outcome is not OscarMovieProcessOutcome.OmdbRequestFailure;
+    }
+
+    private async Task<bool> TryRecordCompletedScanAttemptAsync(OscarLibraryMovieInfo movieInfo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _scanStateService.RecordCompletedScanAttemptAsync(movieInfo.Movie.Id, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Oscar scan state progress could not be saved for movie {MovieName} ({ItemId}). Continuing because metadata processing already completed.",
+                movieInfo.Movie.Name,
+                movieInfo.Movie.Id);
+            return false;
+        }
     }
 
     private static void ClassifyBatchOutcome(

@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/FizzyMUC/jellyfin-oscars-plugin/main/src/Jellyfin.Plugin.Oscars/Resources/logo.png",
     "versions": [
       {
-        "version": "1.0.5.0",
-        "changelog": "Fix scheduled task crashes when scanstate.json is empty or corrupted, recover gracefully by rebuilding scan state, and improve scan-state persistence reliability with temp-file writes.",
+        "version": "1.0.6.0",
+        "changelog": "Fix scan-state persistence failures caused by file locks, close temp files before replacing scanstate.json, retry transient move failures, and keep scans running if scan-state persistence fails.",
         "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.5/jellyfin-oscars-v1.0.5.zip",
-        "checksum": "bb4f4fd955ce21310af14f9ec323e3b5",
-        "timestamp": "2026-05-16T17:25:55Z"
+        "sourceUrl": "https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.6/jellyfin-oscars-v1.0.6.zip",
+        "checksum": "7829c1521e31b57e1f96ef2090a340c7",
+        "timestamp": "2026-05-17T15:59:43Z"
       }
     ]
   }

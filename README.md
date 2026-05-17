@@ -46,7 +46,7 @@ Each movie detail screen gets a badge next to the ratings that indicates if it i
 
 ### Latest release
 
-Current public release: `v1.0.5`
+Current public release: `v1.0.6`
 
 Release highlights:
 
@@ -56,6 +56,9 @@ Release highlights:
 - Fixed scheduled task crashes when `scanstate.json` is empty or corrupted
 - Added graceful scan-state recovery by rebuilding persisted state
 - Improved scan-state persistence reliability with temp-file writes
+- Fixed scan-state persistence failures caused by file locks
+- Added retry handling for transient scan-state move failures
+- Kept scans running when scan-state persistence fails
 
 ### Add Plugin Repository
 
@@ -79,7 +82,7 @@ Release highlights:
 
 1. Download the latest release:
 
-   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.5/jellyfin-oscars-v1.0.5.zip`
+   `https://github.com/FizzyMUC/jellyfin-oscars-plugin/releases/download/v1.0.6/jellyfin-oscars-v1.0.6.zip`
 
 2. Extract the release contents into:
 
@@ -137,7 +140,7 @@ If `Create Oscar Winners collection` is disabled, the plugin deletes the `Oscar 
 
 ### JavaScript Injector
 
-Jellyfin Oscars `v1.0.5` uses `JavaScript Injector` for Jellyfin Web badges. Install `JavaScript Injector` separately, then restart Jellyfin and reload your browser.
+Jellyfin Oscars uses `JavaScript Injector` for Jellyfin Web badges. Install `JavaScript Injector` separately, then restart Jellyfin and reload your browser.
 
 Without `JavaScript Injector`, Oscar metadata, tags, scans, and collections still work normally. Only the Jellyfin Web badge UI is unavailable.
 

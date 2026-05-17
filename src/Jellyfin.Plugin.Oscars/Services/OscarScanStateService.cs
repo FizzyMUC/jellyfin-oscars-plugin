@@ -10,6 +10,8 @@ namespace Jellyfin.Plugin.Oscars.Services;
 /// </summary>
 public sealed class OscarScanStateService : IOscarScanStateService
 {
+    private const int MoveAttemptCount = 3;
+    private static readonly TimeSpan MoveRetryDelay = TimeSpan.FromMilliseconds(75);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -64,8 +66,7 @@ public sealed class OscarScanStateService : IOscarScanStateService
             return new OscarScanStateSnapshot();
         }
 
-        await using var stream = File.OpenRead(_statePath);
-        if (stream.Length == 0)
+        if (new FileInfo(_statePath).Length == 0)
         {
             _logger.LogWarning("Oscar scan state file at {StatePath} was empty. Resetting to a default snapshot.", _statePath);
             var emptySnapshot = new OscarScanStateSnapshot();
@@ -75,6 +76,7 @@ public sealed class OscarScanStateService : IOscarScanStateService
 
         try
         {
+            await using var stream = File.OpenRead(_statePath);
             var snapshot = await JsonSerializer.DeserializeAsync<OscarScanStateSnapshot>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
             if (snapshot is not null)
             {
@@ -99,11 +101,79 @@ public sealed class OscarScanStateService : IOscarScanStateService
             Directory.CreateDirectory(directoryPath);
         }
 
-        var tempPath = _statePath + ".tmp";
-        await using var stream = File.Create(tempPath);
-        await JsonSerializer.SerializeAsync(stream, snapshot, JsonOptions, cancellationToken).ConfigureAwait(false);
-        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-        File.Move(tempPath, _statePath, overwrite: true);
+        var tempPath = CreateTempPath(directoryPath);
+        try
+        {
+            await using (var stream = File.Create(tempPath))
+            {
+                await JsonSerializer.SerializeAsync(stream, snapshot, JsonOptions, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await MoveSnapshotIntoPlaceAsync(tempPath, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            TryDeleteTempFile(tempPath);
+            throw;
+        }
+
         _logger.LogDebug("Persisted Oscar scan state for {ItemCount} items.", snapshot.Items.Count);
+    }
+
+    private string CreateTempPath(string? directoryPath)
+    {
+        var tempFileName = $"{Path.GetFileName(_statePath)}.{Guid.NewGuid():N}.tmp";
+        return string.IsNullOrWhiteSpace(directoryPath)
+            ? tempFileName
+            : Path.Combine(directoryPath, tempFileName);
+    }
+
+    private async Task MoveSnapshotIntoPlaceAsync(string tempPath, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= MoveAttemptCount; attempt++)
+        {
+            try
+            {
+                File.Move(tempPath, _statePath, overwrite: true);
+                return;
+            }
+            catch (IOException) when (attempt < MoveAttemptCount)
+            {
+                _logger.LogDebug(
+                    "Oscar scan state replace attempt {Attempt} of {MaxAttempts} failed because the file was unavailable. Retrying.",
+                    attempt,
+                    MoveAttemptCount);
+                await Task.Delay(MoveRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Oscar scan state could not be replaced at {StatePath} after {AttemptCount} attempts.",
+                    _statePath,
+                    MoveAttemptCount);
+                throw;
+            }
+        }
+    }
+
+    private void TryDeleteTempFile(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "Could not delete temporary Oscar scan state file at {TempPath}.", tempPath);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogDebug(ex, "Could not delete temporary Oscar scan state file at {TempPath}.", tempPath);
+        }
     }
 }
